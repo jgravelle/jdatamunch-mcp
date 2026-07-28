@@ -71,15 +71,15 @@ Index once. Query cheaply. Keep moving.
 >
 > **jDataMunch-only licenses**
 >
-> * [Builder — $39](https://j.gravelle.us/jCodeMunch/descriptions.php#builder) — 1 developer
-> * [Studio — $149](https://j.gravelle.us/jCodeMunch/descriptions.php#studio) — up to 5 developers
-> * [Platform — $499](https://j.gravelle.us/jCodeMunch/descriptions.php#platform) — org-wide internal deployment
+> * [Builder — $39](https://jcodemunch.com/descriptions.php#builder) — 1 developer
+> * [Studio — $149](https://jcodemunch.com/descriptions.php#studio) — up to 5 developers
+> * [Platform — $499](https://jcodemunch.com/descriptions.php#platform) — org-wide internal deployment
 >
 > **Want the full jMunch suite?**
 >
-> * [Munch Trio Builder Bundle — $99](https://j.gravelle.us/jCodeMunch/descriptions.php#builder)
-> * [Munch Trio Studio Bundle — $449](https://j.gravelle.us/jCodeMunch/descriptions.php#studio)
-> * [Munch Trio Platform Bundle — $2,499](https://j.gravelle.us/jCodeMunch/descriptions.php#platform)
+> * [Munch Trio Builder Bundle — $99](https://jcodemunch.com/descriptions.php#builder)
+> * [Munch Trio Studio Bundle — $449](https://jcodemunch.com/descriptions.php#studio)
+> * [Munch Trio Platform Bundle — $2,499](https://jcodemunch.com/descriptions.php#platform)
 
 **Stop paying your model to read the whole damn spreadsheet.**
 
@@ -178,7 +178,7 @@ Every indexed dataset gets auto-generated summaries describing data shape, colum
 
 Every call reports `tokens_saved` and `cost_avoided` estimates. `get_session_stats` shows your cumulative savings across the session, with per-model cost breakdowns. Lifetime stats persist across sessions.
 
-**Community savings meter (anonymous, opt-out).** Each tool call can also contribute an anonymous delta to the live global counter at [j.gravelle.us](https://j.gravelle.us). Only two values are sent: tokens saved, and a random anonymous install ID (generated once, stored in `~/.data-index/_savings.json`). No data, no file paths, no dataset names, no schemas, no identifying material. This is the only network call the base package ever makes on its own. Disable it with:
+**Community savings meter (anonymous, opt-out).** Each tool call can also contribute an anonymous delta to the live global counter, POSTed to `https://j.gravelle.us/APIs/savings/post.php` and displayed at [jcodemunch.com](https://jcodemunch.com). Only two values are sent: tokens saved, and a random anonymous install ID (generated once, stored in `~/.data-index/_savings.json`). No data, no file paths, no dataset names, no schemas, no identifying material. This is the only network call the base package ever makes on its own. Disable it with:
 
 ```bash
 JDATAMUNCH_SHARE_SAVINGS=0
