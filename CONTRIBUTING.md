@@ -14,15 +14,18 @@ the work is yours to submit.
 
 **[Sign the CLA](https://cla-assistant.io/jgravelle/jdatamunch-mcp)**
 
+CLA Assistant will prompt you automatically when you open a PR. It takes about
+30 seconds.
+
 ## Commercial Licensing
 
-If you're using jDataMunch in a commercial context, see the [license section in
-the README](README.md#commercial-licenses) for options.
+If you're using jDataMunch in a commercial context, see the [license section in the
+README](README.md) for options.
 
 ## Getting Started
 
-Dev dependencies live in a PEP 735 `[dependency-groups]` block, not an extra, so
-there is no `.[dev]` to install.
+Dev dependencies are declared in a PEP 735 `[dependency-groups]` block, not an
+optional-dependencies extra, so there is no `.[test]` or `.[dev]` to install.
 
 ```bash
 git clone https://github.com/jgravelle/jdatamunch-mcp
@@ -34,8 +37,12 @@ uv run pytest tests/ -q
 
 # or with pip
 pip install -e . pytest pytest-asyncio pytest-cov
-pytest tests/ -q
+PYTHONPATH=src python -m pytest tests/ -q
 ```
+
+Run the suite with `PYTHONPATH=src`. An installed copy of the package from PyPI
+will otherwise shadow `src/`, and you will be testing the released code instead
+of your change.
 
 ## Guidelines
 
