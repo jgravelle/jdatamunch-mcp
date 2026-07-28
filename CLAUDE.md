@@ -26,6 +26,31 @@
 - **Tool count:** 38 (1.6.0 added `ingest_sql_log`; 1.7.0 added `find_unused_columns`; 1.8.0 added `check_column_drop_safe`; 1.9.0 added `get_schema_impact`; 1.10.0 added `get_redaction_log` + `get_data_hotspots` v2; 1.11.0 added `data_health_radar` + `diff_data_health_radar`; 1.12.0 adds `find_similar_columns`; 1.14.0 adds `tune_weights`; 1.15.0 adds `check_embedding_drift`; 1.16.0 adds `analyze_perf`)
 - **Tests:** 470 passed, 10 skipped (1.12.0)
 
+## Issue + release policy (suite-wide, 2026-07-28)
+
+**1. One issue, one verdict.** A multi-finding report gets SPLIT at triage into
+one issue per finding, cross-linked, credit on each. Detail is not discouraged;
+the reason is closure mechanics. A 4-finding issue closes only when the last one
+settles, so three finished fixes sit behind one unfinished conversation.
+⚠ **Do not optimize the open COUNT** — consolidating five jdoc issues into one
+gate (#95) is what produced a single artifact able to block a release.
+
+**2. A release is NEVER blocked on an open issue**, including a verification we
+asked for. Done + tested + green ships on schedule, carrying a plain
+verification-status line that is deliberately WEAKER than a sign-off; never blur
+the two in a changelog. Late re-verification counts IN FULL and is announced
+retroactively. **Every timebox names its default action.**
+⚠ **A reviewer's thoroughness must never become a veto.**
+
+**3. A contributor's PR is never the only path.** Timebox and keep our own path warm.
+
+⚠⚠ **Never answer "an issue is stuck" with aggregate stats** — the cost of a
+blocked issue is CONCENTRATED, not distributed; design at the OUTLIER. See
+[[feedback_dont_answer_pain_with_aggregates]].
+
+Surfaces: `CONTRIBUTING.md` (created 2026-07-28; jdata had none) +
+`.github/ISSUE_TEMPLATE/`.
+
 ## Key Files
 ```
 src/jdatamunch_mcp/
