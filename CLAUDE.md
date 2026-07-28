@@ -51,6 +51,13 @@ blocked issue is CONCENTRATED, not distributed; design at the OUTLIER. See
 Surfaces: `CONTRIBUTING.md` (created 2026-07-28; jdata had none) +
 `.github/ISSUE_TEMPLATE/`.
 
+⚠ **Dev deps are a PEP 735 `[dependency-groups]` block, NOT an extra** — there is
+no `.[test]` or `.[dev]`. Use `uv sync` (or `pip install -e . pytest
+pytest-asyncio pytest-cov`). The suite-wide CONTRIBUTING said
+`pip install -e ".[test]"` and was wrong in all three repos; CI never caught it
+because CI installs with `uv sync` and never runs the command the docs give a
+human.
+
 ## Key Files
 ```
 src/jdatamunch_mcp/
