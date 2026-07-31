@@ -36,3 +36,7 @@ Thumbs.db
 
 # jdatamunch index data (never commit user data)
 ~/.data-index/
+
+# uv creates this on `uv sync`; jdatamunch resolves fresh in CI (`uv sync`,
+# not `uv sync --locked`), so a committed lock would silently change that.
+uv.lock
