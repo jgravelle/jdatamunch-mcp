@@ -24,7 +24,7 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --group dev --extra excel
+        run: uv sync --group dev --extra excel --extra parquet
 
       - name: Run tests
         run: uv run pytest tests/ -v --tb=short --cov=src --cov-report=term-missing

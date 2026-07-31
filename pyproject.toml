@@ -40,6 +40,10 @@ dev = [
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
     "pytest-cov>=7.0.0",
+    # Writes the .xls fixture the xlrd parser tests read. xlrd itself ships in
+    # the `excel` extra, so without this the .xls branch skipped even on CI --
+    # a skip is not a pass. Test-only: nothing in src imports xlwt.
+    "xlwt>=1.3.0",
 ]
 
 [tool.pytest.ini_options]

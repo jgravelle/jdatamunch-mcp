@@ -23,6 +23,24 @@ from jdatamunch_mcp.embeddings import warm_up_provider
 ST_INSTALLED = importlib.util.find_spec("sentence_transformers") is not None
 
 
+@pytest.fixture
+def fake_st(monkeypatch):
+    """Make `import sentence_transformers` succeed without the real library.
+
+    torch is a ~2 GB dependency, so CI does not install it. Stubbing the module
+    lets the success path of the warm-up be tested where it actually runs
+    instead of skipping there.
+    """
+    import sys
+    import types
+
+    if ST_INSTALLED:
+        yield
+        return
+    monkeypatch.setitem(sys.modules, "sentence_transformers", types.ModuleType("sentence_transformers"))
+    yield
+
+
 # ── warm_up_provider ─────────────────────────────────────────────────────
 
 
@@ -49,19 +67,31 @@ class TestWarmUpProvider:
         monkeypatch.setenv("JDATAMUNCH_EAGER_EMBED_IMPORT", "0")
         assert warm_up_provider("sentence_transformers") is False
 
-    @pytest.mark.skipif(not ST_INSTALLED, reason="sentence-transformers not installed")
-    def test_imports_sentence_transformers(self, monkeypatch):
+    def test_imports_sentence_transformers(self, monkeypatch, fake_st):
+        """CI has no sentence-transformers, so the success path is stubbed.
+
+        Gating this on the real library would leave the whole point of the fix
+        unverified everywhere it actually runs — a skip is not a pass.
+        """
         import sys
 
         monkeypatch.delenv("JDATAMUNCH_EAGER_EMBED_IMPORT", raising=False)
         assert warm_up_provider("sentence_transformers") is True
         assert "sentence_transformers" in sys.modules
 
-    @pytest.mark.skipif(not ST_INSTALLED, reason="sentence-transformers not installed")
-    def test_detects_provider_from_env(self, monkeypatch):
+    def test_detects_provider_from_env(self, monkeypatch, fake_st):
         monkeypatch.delenv("JDATAMUNCH_EAGER_EMBED_IMPORT", raising=False)
         monkeypatch.setenv("JDATAMUNCH_EMBED_MODEL", "all-MiniLM-L6-v2")
         assert warm_up_provider() is True
+
+    @pytest.mark.skipif(not ST_INSTALLED, reason="sentence-transformers not installed")
+    def test_imports_the_real_library_when_present(self, monkeypatch):
+        """Non-vacuity for the stubbed pair above, on a machine that has it."""
+        import sys
+
+        monkeypatch.delenv("JDATAMUNCH_EAGER_EMBED_IMPORT", raising=False)
+        assert warm_up_provider("sentence_transformers") is True
+        assert "sentence_transformers" in sys.modules
 
     def test_broken_backend_does_not_stop_startup(self, monkeypatch):
         """A missing or half-installed torch must not take the server down."""
