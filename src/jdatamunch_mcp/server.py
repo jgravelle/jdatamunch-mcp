@@ -2180,6 +2180,14 @@ def main(argv: Optional[list] = None):
         description="Run the jDataMunch MCP stdio server.",
     )
     parser.parse_args(argv)
+
+    # Import the local embedding backend here, on the main thread, before the
+    # stdio loop starts. Deferring it to the first embed call runs it inside an
+    # asyncio.to_thread worker, which deadlocks on the Windows loader lock
+    # (issue #3). No-op unless a sentence-transformers model is configured.
+    from .embeddings import warm_up_provider
+    warm_up_provider()
+
     asyncio.run(run_server())
 
 

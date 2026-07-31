@@ -38,6 +38,47 @@ def detect_provider() -> Optional[tuple[str, str]]:
     return None
 
 
+# ── Eager backend warm-up (Windows loader-lock guard) ────────────────────
+
+
+def warm_up_provider(provider: Optional[str] = None) -> bool:
+    """Import the active provider's native backend on the *calling* thread.
+
+    sentence-transformers pulls in torch and its native DLLs (torch_cpu.dll,
+    MKL/oneDNN, ...). On Windows, loading those from an `asyncio.to_thread`
+    worker while the main thread has a pending stdio pipe read deadlocks on the
+    loader lock: the first `embed_dataset` / `check_embedding_drift` call never
+    returns (issue #3). Doing that first import up front, on the main thread
+    before the stdio loop starts servicing requests, sidesteps it.
+
+    Costs a few seconds of startup, so it only runs when a local
+    sentence-transformers model is actually configured. The network-backed
+    providers load no native code and are left lazy. Set
+    `JDATAMUNCH_EAGER_EMBED_IMPORT=0` to opt out.
+
+    Returns True when the backend was imported. Never raises — a missing or
+    broken install must not stop the server from starting.
+    """
+    if os.environ.get("JDATAMUNCH_EAGER_EMBED_IMPORT", "").strip() == "0":
+        return False
+
+    if provider is None:
+        detected = detect_provider()
+        if detected is None:
+            return False
+        provider = detected[0]
+
+    if provider != "sentence_transformers":
+        return False
+
+    try:
+        import sentence_transformers  # noqa: F401
+    except Exception as exc:  # pragma: no cover - depends on local install
+        logger.debug("sentence-transformers warm-up skipped: %s", exc)
+        return False
+    return True
+
+
 # ── Per-provider embedding functions (all lazy-imported) ─────────────────
 
 

@@ -134,13 +134,16 @@ def test_persistent_sink_off_by_default(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_registered_and_dispatches(tmp_path):
+async def test_registered_and_dispatches(tmp_path, monkeypatch):
     from jdatamunch_mcp.server import call_tool, list_tools
 
     names = [t.name for t in await list_tools()]
     assert "analyze_perf" in names
 
-    res = await call_tool("analyze_perf", {"storage_path": str(tmp_path)})
+    # call_tool takes the storage root from DATA_INDEX_PATH, not from the
+    # arguments dict -- passing storage_path here reads the real home index.
+    monkeypatch.setenv("DATA_INDEX_PATH", str(tmp_path))
+    res = await call_tool("analyze_perf", {})
     payload = json.loads(res[0].text)
     assert payload["window"] == "session"
     # The dispatch itself records a latency sample for analyze_perf.

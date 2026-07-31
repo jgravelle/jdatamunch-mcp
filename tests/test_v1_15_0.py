@@ -102,7 +102,10 @@ async def test_registered_and_dispatches(tmp_path, monkeypatch):
     names = [t.name for t in await list_tools()]
     assert "check_embedding_drift" in names
 
+    # call_tool takes the storage root from DATA_INDEX_PATH, not from the
+    # arguments dict -- passing storage_path here reads the real home index.
+    monkeypatch.setenv("DATA_INDEX_PATH", str(tmp_path))
     monkeypatch.setattr(embed_drift, "_resolve_provider", lambda: None)
-    res = await call_tool("check_embedding_drift", {"storage_path": str(tmp_path)})
+    res = await call_tool("check_embedding_drift", {})
     payload = json.loads(res[0].text)
     assert payload["has_canary"] is False

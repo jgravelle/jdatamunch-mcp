@@ -486,10 +486,20 @@ Multiple filters are ANDed. No raw SQL accepted — injection surface is zero.
 | `GOOGLE_API_KEY` | — | AI column summaries via Gemini |
 | `GITHUB_TOKEN` | — | Private repo access for `index_repo` |
 | `JDATAMUNCH_EMBED_MODEL` | — | Local sentence-transformers model for semantic search |
+| `JDATAMUNCH_EAGER_EMBED_IMPORT` | `1` | When a local sentence-transformers model is configured, import that backend at startup instead of on the first embed call. Set `0` for a faster start, at the cost of the Windows hang described below |
 | `GOOGLE_EMBED_MODEL` | — | Gemini embedding model for semantic search |
 | `OPENAI_API_KEY` | — | OpenAI embeddings for semantic search |
 | `OPENAI_EMBED_MODEL` | — | OpenAI embedding model for semantic search |
 | `JDATAMUNCH_LAUNCH_ID` | — | Opaque launch token echoed back as `launch_id` in the `munch://runtime/identity` resource (fallback: `MUNCH_LAUNCH_ID`); omitted when unset |
+
+**Startup with a local embedding model.** Setting `JDATAMUNCH_EMBED_MODEL` makes the
+server import sentence-transformers (and torch) at startup, on the main thread, before
+it begins servicing requests. That adds several seconds to launch. It is not optional
+polish: deferring the import to the first `embed_dataset` / `check_embedding_drift` call
+runs it on a worker thread while the main thread is reading the stdio pipe, which
+deadlocks on the Windows loader lock and hangs the call forever. `JDATAMUNCH_EAGER_EMBED_IMPORT=0`
+restores the lazy import if you need the faster start and are not on Windows. Nothing is
+downloaded and no model is loaded at startup — the import alone is what matters.
 
 `get_session_stats` also reports a `tool_surface` receipt: visible vs catalog tool counts, estimated schema tokens for each (bytes/4 scale), tokens avoided by the active tool profile, and the heaviest tool schemas. Computed inline on the stats call; nothing persisted.
 
