@@ -407,6 +407,78 @@ class DataStore:
         index = _index_from_dict(data)
         return _stamp_load_provenance(index, path, self.sqlite_path(dataset_id))
 
+    def source_freshness(self, index) -> dict:
+        """Cheap, PROVABLE-ONLY freshness reading for a dataset's source file.
+
+        ⚠ This never returns ``fresh``, and that is the point, not a gap.
+        jData's standing product call (2026-07-24) is that a permanent
+        ``index: "fresh"`` asserts currency this product cannot back, so the
+        index channel appears only as a positive detection. This keeps that
+        rule exactly: it reports what it can PROVE and says ``unknown``
+        otherwise.
+
+        What it can prove cheaply, with a ``stat`` and no hashing:
+
+        * ``missing_source`` — the file we indexed is gone. Whatever we serve
+          describes something that is no longer there.
+        * ``stale`` — the size differs from the size recorded at index time, so
+          the content definitely changed.
+        * ``unknown`` — the size matches, or we could not look. A matching size
+          does NOT prove matching content, and ``verify_source`` exists for
+          callers who want that answer and will pay for it.
+
+        Deliberately not hashing: the source can be hundreds of megabytes and
+        this runs on ordinary read calls. ``needs_reindex`` already does the
+        full hash comparison where paying for it is the point.
+        """
+        source_path = getattr(index, "source_path", "") or ""
+        if not source_path:
+            return {"state": "unknown", "reason": "no source path recorded"}
+        try:
+            p = Path(source_path)
+            if not p.exists():
+                return {"state": "missing_source", "source_path": source_path}
+            size = p.stat().st_size
+        except OSError as exc:
+            return {"state": "unknown", "reason": f"source unreadable: {exc}"}
+
+        recorded = getattr(index, "source_size_bytes", None)
+        if recorded is not None and size != recorded:
+            return {
+                "state": "stale",
+                "source_path": source_path,
+                "indexed_size_bytes": recorded,
+                "current_size_bytes": size,
+            }
+        return {
+            "state": "unknown",
+            "reason": (
+                "size matches the indexed size, which does not prove the "
+                "content matches. jData does not track index freshness; pass "
+                "verify_source=True to compare content hashes."
+            ),
+        }
+
+    def verify_source(self, index) -> dict:
+        """The EXPENSIVE reading: compare the source file's content hash.
+
+        Only this can return ``fresh``, because only this actually establishes
+        it. Opt-in, because it re-hashes the whole source file.
+        """
+        source_path = getattr(index, "source_path", "") or ""
+        if not source_path or not Path(source_path).exists():
+            return self.source_freshness(index)
+        try:
+            current = _hash_file(source_path)
+        except OSError as exc:
+            return {"state": "unknown", "reason": f"source unreadable: {exc}"}
+        recorded = getattr(index, "source_hash", "") or ""
+        if not recorded:
+            return {"state": "unknown", "reason": "no source hash recorded"}
+        if current == recorded:
+            return {"state": "fresh", "verified": "content_hash"}
+        return {"state": "stale", "verified": "content_hash", "source_path": source_path}
+
     def needs_reindex(self, dataset_id: str, source_path: str) -> bool:
         """Return True if the source file has changed or was never indexed."""
         idx = self.load(dataset_id)

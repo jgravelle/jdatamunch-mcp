@@ -24,6 +24,7 @@ def describe_column(
     redact: bool = True,
     redact_patterns: Optional[list] = None,
     storage_path: Optional[str] = None,
+    verify_source: bool = False,
 ) -> dict:
     """Return a deep profile of a single column.
 
@@ -147,10 +148,39 @@ def describe_column(
 
     combined_summary = merge_summary(sample_summary or {}, vd_summary or {}, tv_summary or {})
 
+    # Freshness of the SOURCE FILE this profile describes. A column profile is
+    # a claim about data on disk, so a caller deserves to know when that file
+    # has changed or vanished underneath the index.
+    #
+    # ⚠ `fresh` is reachable ONLY via verify_source=True, which re-hashes the
+    # file. The cheap reading proves `stale` / `missing_source` or says
+    # `unknown`; it never asserts currency. That is jData's standing rule —
+    # the index channel is a positive detection, never a standing claim.
+    freshness = (
+        store.verify_source(idx) if verify_source else store.source_freshness(idx)
+    )
+    verdict = {
+        "state": "degraded" if freshness["state"] in ("stale", "missing_source") else "ok",
+        "scorer": 1,
+        "channels": {},
+        "note": (
+            "The source file changed since indexing; this profile describes "
+            "the indexed snapshot, not the file as it stands now."
+            if freshness["state"] in ("stale", "missing_source")
+            else "Profile returned from the indexed snapshot."
+        ),
+    }
+    if freshness["state"] in ("stale", "missing_source"):
+        verdict["channels"]["index"] = "stale"
+    elif freshness["state"] == "fresh":
+        verdict["channels"]["index"] = "fresh"
+
     return {
         "result": result,
         "_meta": {
             "timing_ms": round((time.time() - t0) * 1000, 1),
+            "freshness": freshness,
+            "verdict": verdict,
             "tokens_saved": tokens_saved,
             "total_tokens_saved": total_saved,
             **cost_avoided(tokens_saved, total_saved),

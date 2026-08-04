@@ -1,5 +1,40 @@
 # Changelog
 
+## [1.30.0] - 2026-08-04 - describe_column discloses whether its source still matches
+
+A column profile is a claim about data on disk. `describe_column` returned that
+profile with no indication of whether the file it describes had changed, or been
+deleted, since indexing — so a caller could not tell a current profile from one
+describing a file that no longer exists. It now emits `_meta.freshness` and
+`_meta.verdict`.
+
+⚠ **`fresh` is reachable ONLY through the new opt-in `verify_source=True`, and
+that is the design rather than a limitation.** jData's standing product call
+(2026-07-24) is that a permanent `index: "fresh"` asserts currency this product
+cannot back, which is why the index channel appears only as a positive
+detection. This change keeps that rule exactly:
+
+* the cheap default reading proves `stale` or `missing_source` with a `stat`,
+  and otherwise says `unknown` — it never asserts `fresh`, and it emits no index
+  channel at all when it has proven nothing;
+* `verify_source=True` re-hashes the source file, which is the only thing that
+  actually establishes currency. Opt-in, because a source can be hundreds of
+  megabytes and this runs on ordinary read calls.
+
+A matching size does NOT prove matching content, and the `unknown` reading says
+so in its own `reason` rather than leaving a caller to infer it. An in-place
+edit that preserves the byte count is invisible to the cheap path and caught by
+the hash — there is a test for exactly that, and it is why the two readings
+exist separately.
+
+New `DataStore.source_freshness` and `DataStore.verify_source`. A test pins that
+`source_freshness` can never return `fresh`, so a later caller cannot obtain
+that answer cheaply.
+
+Additive: new `_meta` keys and one defaulted kwarg. No tool-count, schema or
+INDEX_VERSION change. Tests `tests/test_source_freshness.py` (13); suite 725
+passed / 1 skipped.
+
 ## [1.29.0] - 2026-07-25 - an ignored argument cannot prove absence
 
 ### Fixed
