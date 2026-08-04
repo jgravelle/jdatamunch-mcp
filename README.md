@@ -404,7 +404,8 @@ The agent will call `get_session_stats`, which returns session and lifetime toke
 
 ## Stability guarantees (v1.0.0)
 
-Earned by Phase A in `todo.md`. These are commitments, not aspirations.
+Earned by the v1.0.0 hardening work (see `CHANGELOG.md` `[1.0.0]`). These are
+commitments, not aspirations.
 
 **Statistical correctness**
 - Means use Welford online updates with Neumaier-compensated sums — accurate
