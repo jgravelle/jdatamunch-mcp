@@ -16,6 +16,22 @@ from ..storage.data_store import DataStore
 from ..storage.token_tracker import estimate_savings, record_savings, cost_avoided
 
 
+def _offload():
+    """The offloadable-work annotator, or None when it cannot be imported.
+
+    Off by default; the module's own env gate decides whether anything is
+    emitted. Imported lazily and tolerant of absence so a build without it
+    degrades to "no annotation" rather than breaking column profiling.
+    """
+    try:
+        from .. import offload
+
+        return offload
+    except ImportError:
+        return None
+
+
+
 def describe_column(
     dataset: str,
     column: str,
@@ -175,7 +191,7 @@ def describe_column(
     elif freshness["state"] == "fresh":
         verdict["channels"]["index"] = "fresh"
 
-    return {
+    out = {
         "result": result,
         "_meta": {
             "timing_ms": round((time.time() - t0) * 1000, 1),
@@ -191,3 +207,24 @@ def describe_column(
             ),
         },
     }
+    _mod = _offload()
+    if _mod is not None:
+        # ⚠ A column's "body" is its PROFILE, not raw rows, and `type` is the
+        # field every profile carries whether or not the column has samples.
+        # Keying on `sample_values` would read a legitimately empty column as a
+        # missing body, and redaction can empty that list on purpose.
+        #
+        # The dataset is this column's container, supplied as a VIEW so the
+        # served `result` never grows a field just to satisfy the annotator.
+        _mod.annotate(
+            out,
+            units=[dict(result, dataset=dataset)],
+            retrieval_mode=_mod.MODE_IDENTITY,
+            body_field="type",
+            container_field="dataset",
+            verify_with={
+                "tool": "describe_column",
+                "args": {"dataset": dataset, "column": column, "verify_source": True},
+            },
+        )
+    return out

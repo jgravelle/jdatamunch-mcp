@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.31.0] - 2026-08-04 - offloadable-work annotation, off by default
+
+`describe_column` can now tell you whether the work its payload enables is
+grunt-work a cheaper model can do. Set `JMUNCH_OFFLOADABLE=1` (or
+`JDATAMUNCH_OFFLOADABLE=1` for this server alone) and the reply carries an
+advisory `_meta.offloadable` block. Off by default.
+
+**We label. We never route, execute, or hold model credentials.** No new
+process, no network call, no new tool, no model of ours runs.
+
+Routers classify the *prompt*. This sits downstream of retrieval and classifies
+*the evidence just assembled*: whether the profile is actually in the payload,
+how many datasets it spans, and whether the source-file reading came back
+unknown. Tri-state, reason-coded, fails closed.
+
+⚠ **A default call is refused, and that is correct rather than a gap.** jData
+does not assert index freshness it cannot back, so the cheap reading answers
+`unknown` and the criterion refuses on it. Pass `verify_source=True` — which
+re-hashes the source file and is the only thing that actually establishes
+currency — and a clean profile is labelled `offloadable`. `verify_with` points
+at exactly that call. **The annotation is only ever as strong as the evidence
+behind it, and here you can see the difference the evidence makes.**
+
+Identical field contract in jcodemunch-mcp (symbols/files) and jdocmunch-mcp
+(sections/documents): the vocabulary is *units* and *containers*, and a pinned
+`CONTRACT_DIGEST` plus a generated contract test fails the build in any of the
+three that drifts.
+
+Additive: one new `_meta` key, emitted only when gated on. No tool-count, schema
+or `INDEX_VERSION` change. Tests `tests/test_offload_contract.py` (23).
+
 ## [1.30.0] - 2026-08-04 - describe_column discloses whether its source still matches
 
 A column profile is a claim about data on disk. `describe_column` returned that
