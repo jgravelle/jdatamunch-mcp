@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.31.1] - 2026-08-05 - README rewritten as a landing page; SECURITY.md added; benchmark figures corrected
+
+- README restructured and reduced 656 -> 200 lines, with a new Limitations section. Corrected two commands that did not exist: jdatamunch-mcp has no CLI subcommands, so `index-local` and `--version` were wrong.
+- SECURITY.md added. The README linked a security policy and none existed. Documents the four network destinations, the security.py validators, and every JDATAMUNCH_* variable affecting data movement.
+- benchmarks: reduction was published as `100.0%`; the true values are 99.9957-99.9965%. run_benchmark.py rounded to 1dp, which asserts total elimination. Fixed in the harness so a regeneration cannot reintroduce it.
+- benchmarks: the grand total assumed the file is re-read for every task, multiplying the headline saving 5x. Both totals now published side by side with the assumption stated.
+- benchmarks: METHODOLOGY claimed cl100k_base agrees with Claude estimates within ~5%. Claude 4.7+ uses a newer tokenizer producing ~30% more tokens; the claim is corrected.
+- No code change to the server. Docs and benchmark harness only.
+
 ## [1.31.0] - 2026-08-04 - offloadable-work annotation, off by default
 
 `describe_column` can now tell you whether the work its payload enables is
