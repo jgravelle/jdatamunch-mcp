@@ -41,8 +41,12 @@ Five queries chosen to represent common data exploration intents:
 
 **Baseline tokens** = the entire raw CSV file read and tokenized.
 This represents the **minimum** cost for a "read everything first" agent.
-Real agents often read the same file multiple times, so production savings
-are higher than what the benchmark reports.
+
+⚠ **Whether that minimum is multiplied per task is an assumption, not a
+measurement, and it changes the headline by 5x.** An agent working five tasks in
+one session reads the file once; five separate sessions read it five times.
+[results.md](results.md) reports both totals side by side rather than choosing
+one. Any figure quoted from this benchmark should say which it is.
 
 ## jDataMunch Workflow
 
@@ -59,8 +63,15 @@ AI summaries were **disabled** during benchmarking (`use_ai_summaries=False`).
 
 ## Token Counting Method
 
-**Tokenizer:** `tiktoken` with `cl100k_base` encoding (used by GPT-4 and
-compatible with Claude token estimates within ~5%).
+**Tokenizer:** `tiktoken` with `cl100k_base` encoding.
+
+⚠ **`cl100k_base` is a GPT tokenizer and is used here as a common, reproducible
+reference point — not as a stand-in for Claude's.** An earlier revision claimed
+agreement with Claude token estimates "within ~5%". That is no longer true:
+Anthropic states that Claude 4.7 and later use a newer tokenizer producing
+roughly **30% more tokens for the same text**. Token counts here are therefore
+comparable *between the baseline and jDataMunch columns*, which is what the
+ratio depends on, but they should not be read as Claude token counts.
 
 Token counts are computed from the **serialized JSON response** strings,
 not raw source bytes. This means:
@@ -92,9 +103,14 @@ The harness indexes the file, tokenizes the baseline, runs each task against
 
 ## Results Summary
 
-| Dataset | Avg Reduction | Avg Ratio |
+| Dataset | Avg Reduction | Avg Ratio (mean of per-task ratios) |
 |---------|:------------:|:---------:|
-| crime.csv (1M rows, 28 cols) | 100.0% | **25,333x** |
+| crime.csv (1M rows, 28 cols) | 99.996% | **25,333x** |
+
+⚠ **Not 100%.** Earlier revisions rounded 99.996% to `100.0%`, which asserts
+total elimination rather than near-total. The ratio quoted here is the mean of
+the five per-task ratios; the ratio of the totals is 25,201.6x. See
+[results.md](results.md) for both.
 
 ## Limitations
 

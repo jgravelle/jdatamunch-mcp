@@ -222,7 +222,9 @@ def benchmark_file(csv_path: str, storage_path: str) -> dict:
             "description": task["description"],
             "baseline_tokens": baseline["tokens"],
             "jdatamunch_tokens": jdm["tokens"],
-            "reduction_pct": round(reduction_pct, 1),
+            # 4dp, NOT 1dp. At these ratios 1dp rounds 99.9965 to "100.0",
+            # which asserts total elimination rather than near-total.
+            "reduction_pct": round(reduction_pct, 4),
             "ratio": round(ratio, 1),
             "describe_dataset_tokens": jdm["describe_dataset_tokens"],
             "describe_column_tokens": jdm["describe_column_tokens"],
@@ -286,7 +288,7 @@ def render_markdown(results: list[dict], tokenizer: str) -> str:
                 f"| `{t['query']}` "
                 f"| {t['baseline_tokens']:,} "
                 f"| {t['jdatamunch_tokens']:,} "
-                f"| **{t['reduction_pct']}%** "
+                f"| **{t['reduction_pct']:.4f}%** "
                 f"| {t['ratio']}x |"
             )
             grand_jdm += t["jdatamunch_tokens"]
@@ -297,8 +299,8 @@ def render_markdown(results: list[dict], tokenizer: str) -> str:
             avg_reduction = sum(t["reduction_pct"] for t in valid_tasks) / len(valid_tasks)
             avg_ratio = sum(t["ratio"] for t in valid_tasks) / len(valid_tasks)
             lines.append(
-                f"| **Average** | — | — "
-                f"| **{avg_reduction:.1f}%** "
+                f"| **Average (mean of per-task ratios)** | — | — "
+                f"| **{avg_reduction:.4f}%** "
                 f"| **{avg_ratio:.1f}x** |"
             )
         lines.append("")
@@ -332,16 +334,25 @@ def render_markdown(results: list[dict], tokenizer: str) -> str:
         lines.append("")
         lines.append("| | Tokens |")
         lines.append("|--|-------:|")
-        lines.append(f"| Baseline total ({grand_tasks} task-runs) | {grand_baseline:,} |")
+        lines.append(
+            f"| Baseline total ({grand_tasks} task-runs, assumes one full "
+            f"read PER TASK) | {grand_baseline:,} |"
+        )
         lines.append(f"| jDataMunch total | {grand_jdm:,} |")
-        lines.append(f"| **Reduction** | **{grand_reduction:.1f}%** |")
-        lines.append(f"| **Ratio** | **{grand_ratio:.1f}x** |")
+        lines.append(f"| **Reduction** | **{grand_reduction:.4f}%** |")
+        lines.append(f"| **Ratio (of totals)** | **{grand_ratio:.1f}x** |")
+        lines.append(
+            f"| Single-read baseline (one read, {grand_tasks} tasks) | "
+            f"{grand_baseline // grand_tasks:,} |"
+        )
         lines.append("")
         lines.append(
             f"> Measured with tiktoken `{tokenizer}`. "
             "Baseline = full raw file tokenized. "
             "jDataMunch = describe_dataset + describe_column per task. "
-            "AI summaries disabled."
+            "AI summaries disabled. The grand baseline assumes the file is "
+            "re-read for every task; a single session reads it once, which is "
+            "the single-read row. Quote which one you mean."
         )
 
     return "\n".join(lines)
