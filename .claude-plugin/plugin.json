@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "jdatamunch",
+  "displayName": "jDataMunch",
+  "version": "1.31.1",
+  "description": "Token-efficient MCP server for tabular data retrieval via CSV/Excel/Parquet/JSONL indexing",
+  "author": {
+    "name": "J. Gravelle",
+    "url": "https://github.com/jgravelle"
+  },
+  "homepage": "https://github.com/jgravelle/jdatamunch-mcp#readme",
+  "repository": "https://github.com/jgravelle/jdatamunch-mcp",
+  "license": "LicenseRef-Dual-Use",
+  "keywords": [
+    "data",
+    "mcp",
+    "csv",
+    "excel",
+    "tabular",
+    "token-efficiency"
+  ],
+  "mcpServers": {
+    "jdatamunch": {
+      "command": "uvx",
+      "args": [
+        "jdatamunch-mcp"
+      ]
+    }
+  }
+}
