@@ -65,6 +65,34 @@ def test_no_root_mcp_json():
     )
 
 
+def test_marketplace_uses_no_github_sources():
+    """A `github` plugin source clones over SSH and fails without a key.
+
+    Measured: `claude plugin install jdocmunch@jmunch` against a github source
+    died on `git@github.com: Permission denied (publickey)`. The marketplace
+    fetch itself falls back to HTTPS ("SSH not configured, cloning via HTTPS")
+    but the plugin-source fetch does not, so a public marketplace built on
+    github sources is installable only by users who happen to have an SSH key.
+    Use an explicit `url` source with an https:// URL instead.
+    """
+    marketplace = REPO_ROOT / ".claude-plugin" / "marketplace.json"
+    if not marketplace.exists():
+        return  # only the marketplace-hosting repo carries this file
+
+    data = json.loads(marketplace.read_text(encoding="utf-8"))
+    for entry in data["plugins"]:
+        source = entry["source"]
+        if isinstance(source, dict):
+            assert source["source"] != "github", (
+                f"plugin {entry['name']!r} uses a github source, which clones "
+                f"over SSH; use {{'source': 'url', 'url': 'https://...'}}"
+            )
+            if source["source"] == "url":
+                assert source["url"].startswith("https://"), (
+                    f"plugin {entry['name']!r} source url must be https"
+                )
+
+
 def test_mcp_config_launches_this_package():
     manifest = json.loads(PLUGIN_JSON.read_text(encoding="utf-8"))
     package = _pyproject_field("name")
