@@ -2,13 +2,13 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.jgravelle/jdatamunch-mcp",
   "title": "jDataMunch MCP",
-  "description": "Token-efficient MCP server for tabular data retrieval. Index CSV/Excel files, query rows, aggregate — 99%+ token savings vs raw file reads.",
-  "version": "0.8.2",
+  "description": "Tabular data retrieval. Index CSV/Excel, query rows, aggregate. 99%+ savings vs raw file reads.",
+  "version": "1.31.1",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "jdatamunch-mcp",
-      "version": "0.8.2",
+      "version": "1.31.1",
       "transport": {
         "type": "stdio"
       }
