@@ -1999,8 +1999,18 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         else:
             result = {"error": f"Unknown tool: {name}"}
 
+        _truncation = None
         if isinstance(result, dict) and "error" not in result:
             result = enforce_budget(result, name)
+            # ⚠⚠ `enforce_budget` records what it dropped in `_meta.truncation`,
+            # and this server strips `_meta` by DEFAULT — so the notice was
+            # deleted before the caller saw it. Measured: 600 rows trimmed to
+            # 104, disclosure gone, response indistinguishable from a complete
+            # one. A silently shortened answer is worse than a refused one
+            # because the caller cannot tell. Captured here and re-attached
+            # TOP-LEVEL after filtering, the same treatment the absence ref and
+            # ignored_arguments already get for the same reason.
+            _truncation = (result.get("_meta") or {}).get("truncation")
             if loop_warning:
                 result.setdefault("_meta", {})["loop_warning"] = loop_warning
 
@@ -2069,6 +2079,21 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                         _meta[field] = existing_meta[field]
                 if _meta:
                     result["_meta"] = _meta
+
+        # Truncation disclosure, re-attached AFTER meta_fields filtering.
+        # Top-level for the same reason `ignored_arguments` is: a notice the
+        # default config deletes is not a notice.
+        try:
+            if _truncation and isinstance(result, dict):
+                result["truncated"] = _truncation
+                result["truncated_note"] = (
+                    "This response was shortened to fit the token budget and is "
+                    "NOT complete. Narrow the query, or raise "
+                    "JDATAMUNCH_MAX_RESPONSE_TOKENS, before reading the result "
+                    "as the full set."
+                )
+        except Exception:
+            pass
 
         try:
             _perf.record(

@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.31.2] - 2026-08-07 - a truncated response said so in a field the default config deletes
+
+`enforce_budget` trims rows and columns to fit the response token budget and
+records what it dropped in `_meta.truncation`. This server strips `_meta`
+entirely by default (`get_meta_fields()` returns `[]` unless
+`JDATAMUNCH_META_FIELDS` is set), so the notice was deleted before any caller
+saw it.
+
+Measured on a 600-row fixture: trimmed to 104 rows, disclosure gone, and the
+response is indistinguishable from a complete one.
+
+**A silently shortened answer is worse than a refused one, because the caller
+cannot tell the difference.** An agent reading 104 rows as the full result will
+draw conclusions about data that was never shown to it -- which for a tabular
+retrieval server is the failure mode that matters most.
+
+The truncation record is now captured before `meta_fields` filtering and
+re-attached TOP-LEVEL afterwards, as `truncated` plus a `truncated_note` that
+states the response is not complete and names `JDATAMUNCH_MAX_RESPONSE_TOKENS`.
+That is the same treatment the absence ref (v1.26.0), the budget block
+(v1.21.0) and the `empty`/`hint` keys (v1.28.0) already get, for the same
+reason: a token the default config deletes is a token the agent never reads.
+
+Truncation behaviour itself is unchanged. Omitted when nothing was trimmed.
+
+Found while checking whether the four defects fixed in jdocmunch 1.124.0 had
+siblings here. Two of the four did not (`lstrip("./")` does not appear in this
+tree, and the argument contract has been present since the jcm v1.108.175
+port). This one is jData's own variant of the same class.
+
+Tests: `tests/test_truncation_disclosure.py` (10), including an end-to-end run
+on a real indexed CSV asserting a caller receives `truncated` under the DEFAULT
+config, and an omit-when-empty control.
+
 ## [1.31.1] - 2026-08-05 - README rewritten as a landing page; SECURITY.md added; benchmark figures corrected
 
 - README restructured and reduced 656 -> 200 lines, with a new Limitations section. Corrected two commands that did not exist: jdatamunch-mcp has no CLI subcommands, so `index-local` and `--version` were wrong.
