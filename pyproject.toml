@@ -1,6 +1,6 @@
 [project]
 name = "jdatamunch-mcp"
-version = "1.31.4"
+version = "1.31.5"
 description = "Token-efficient MCP server for tabular data retrieval via CSV/Excel/Parquet/JSONL indexing"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -45,6 +45,11 @@ packages = ["src/jdatamunch_mcp"]
 
 [dependency-groups]
 dev = [
+    # Required by the `lint` job in .github/workflows/test.yml. Locally
+    # `uv run ruff` fetches it on demand, which is exactly why its absence here
+    # was invisible until CI ran: the job failed with "Failed to spawn: ruff"
+    # on its very first run.
+    "ruff>=0.6.0",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
     "pytest-cov>=7.0.0",
@@ -62,11 +67,22 @@ asyncio_mode = "auto"
 target-version = "py310"
 
 [tool.ruff.lint]
+# ⚠⚠ EXPLICIT `select`. Ruff's DEFAULT rule set is not stable across versions,
+# and this repo has no `uv.lock` to pin ruff with, so `ignore`-only config means
+# the gate's strictness changes under you whenever ruff ships a release.
+# Measured 2026-08-07: config unchanged, ruff 0.16.2 resolved 446 findings
+# (YTT/ASYNC/S/BLE/B/UP/I) where the intended set gives 10.
+#
+# These four are pycodestyle E4/E7/E9 + pyflakes F: the high-signal correctness
+# rules (undefined names, unused imports, f-string bugs, duplicate keys,
+# redefinitions). Widening the set is a deliberate decision, not a ruff upgrade.
+select = ["E4", "E7", "E9", "F"]
 # Default rule set is pycodestyle E4/E7/E9 + pyflakes F. We keep the high-signal
 # correctness rules and grandfather the codes that reflect deliberate, pervasive
 # patterns here rather than defects.
 #
-# Added 2026-08-07 with v1.31.4, alongside jdocmunch-mcp. This repo was already
+# Added 2026-08-07 with v1.31.4 (and made to actually run in v1.31.5),
+# alongside jdocmunch-mcp. This repo was already
 # clean on F821 (undefined names); jdoc was not, and had shipped one.
 ignore = [
     "E702",  # multiple-statements-on-one-line-semicolon: 8 terse guards

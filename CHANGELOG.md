@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.31.5] - 2026-08-07 - The lint gate actually runs
+
+v1.31.4 added a lint job that could not execute. Two defects in it, both found by
+CI rather than locally, and the second is the interesting one.
+
+**1. `ruff` was not in the dev group.** The job ran `uv sync --group dev` and then
+`uv run ruff check src/`, which failed with `Failed to spawn: ruff`. Locally
+`uv run ruff` fetches it on demand, which is exactly why its absence was
+invisible: the command that "worked" on my machine could not work in CI.
+
+**2. The rule set was whatever ruff shipped that week.** With `ignore`-only
+config, ruff applies its DEFAULT selection, and that default is not stable across
+versions. Reproducing CI in a clean environment:
+
+```
+config unchanged, ruff 0.16.2  ->  446 findings (YTT/ASYNC/S/BLE/B/UP/I)
+intended rule set              ->   10 findings
+```
+
+jcodemunch-mcp never saw this because it tracks `uv.lock`, which pins ruff. This
+repo gitignores its lock by design, so an unpinned `ignore`-only config means the
+gate's strictness changes underneath it on someone else's release schedule.
+
+`[tool.ruff.lint]` now declares `select = ["E4", "E7", "E9", "F"]` explicitly:
+pycodestyle's correctness subset plus pyflakes. Widening it becomes a decision
+someone makes, not something a ruff upgrade does to you. Applied to all three
+servers in the suite, including jcm, which was exposed the moment anyone re-locked.
+
+v1.31.4's package was sound: all eight test matrix jobs passed, and the source is
+unchanged here apart from this configuration. Only its new lint job was broken.
+
 ## [1.31.4] - 2026-08-07 - A lint gate
 
 CI had no lint job. It has one now, added alongside jdocmunch-mcp.
