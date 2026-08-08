@@ -185,7 +185,7 @@ async def index_repo(
             # Incremental: check if we have a marker file with the same SHA
             marker_path = Path(store_path) / f".repo-sha-{repo_prefix}"
             if incremental and head_sha and marker_path.exists():
-                stored_sha = marker_path.read_text().strip()
+                stored_sha = marker_path.read_text(encoding="utf-8", errors="replace").strip()
                 if stored_sha == head_sha:
                     return {
                         "result": {
@@ -282,7 +282,7 @@ async def index_repo(
         # Save HEAD SHA marker for incremental
         if head_sha:
             Path(store_path).mkdir(parents=True, exist_ok=True)
-            marker_path.write_text(head_sha)
+            marker_path.write_text(head_sha, encoding="utf-8")
 
         # Coverage block (1.20.0): what this repo ingest excluded, by reason.
         # Persisted as a sidecar next to the .repo-sha marker so a later

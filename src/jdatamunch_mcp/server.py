@@ -2195,8 +2195,50 @@ async def run_server():
         )
 
 
+def _force_utf8_stdio() -> None:
+    """Make CLI output UTF-8 regardless of the platform locale.
+
+    Suite parity with jcodemunch-mcp v1.108.262 and jdocmunch-mcp.
+
+    On Windows, `sys.stdout` is the **console** stream (already UTF-8) when
+    attached to a terminal and the **locale** stream (cp1252) when piped or
+    redirected. Output containing any non-ASCII character then goes out as
+    cp1252 bytes the moment anything consumes it, and a character cp1252 cannot
+    encode at all crashes the command outright.
+
+    ⚠ **This repo has no such output today**, which is exactly why the fix
+    belongs at the entry point rather than in the strings: the defect arrives
+    with the next character someone adds, and it arrives as a crash on a user's
+    machine that nobody can reproduce interactively. jcm carried it for an
+    unknown number of releases before a pipe revealed it.
+
+    ⚠ The MCP stdio transport is unaffected: it wraps `sys.stdout.buffer` in
+    its own TextIOWrapper and never reads the text layer reconfigured here.
+
+    ⚠ `errors="replace"` is deliberate -- filesystem paths can carry
+    surrogates from a `surrogateescape` decode, which raise even under UTF-8.
+
+    ⚠ `PYTHONIOENCODING` is honoured as an explicit opt-out.
+    """
+    if os.environ.get("PYTHONIOENCODING"):
+        return
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        current = (getattr(stream, "encoding", "") or "").lower().replace("-", "")
+        if current in ("utf8", "utf8mb4"):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
 def main(argv: Optional[list] = None):
     """Main entry point."""
+    _force_utf8_stdio()
     from .security import verify_package_integrity
     verify_package_integrity()
 

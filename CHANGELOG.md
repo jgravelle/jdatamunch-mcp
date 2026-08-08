@@ -1,5 +1,72 @@
 # Changelog
 
+## [1.31.3] - 2026-08-07 - Text-mode IO and CLI output declare their encoding
+
+Suite parity with jcodemunch-mcp, which swept three directions of the same cp1252
+hazard. This repo was scanned separately; nothing about a defect living in one
+server implies it lives in its siblings, and nothing implies it does not.
+
+| Direction | Found here |
+|-----------|------------|
+| subprocess **input** | 0, already clean since the 2026-08-03 sweep |
+| our own **output** | 0 |
+| **file IO** | 7 sites |
+
+### File IO
+
+`open()`, `Path.read_text()` and `Path.write_text()` use the platform default
+when no encoding is given, which is cp1252 on Windows. Reading a UTF-8 file then
+raises on the five bytes cp1252 leaves undefined (`81 8D 8F 90 9D`) and silently
+mangles everything else. Fixed at the savings tracker (4) and the repo-SHA markers (3).
+
+⚠ Every one of these holds ASCII-only content today (JSON with ASCII keys, and git SHAs), so nothing
+was corrupt. The exposure is a future non-ASCII value landing in one of them.
+Stated plainly rather than dressed up as a bug fix.
+
+### Output
+
+Nothing non-ASCII is emitted here today, so nothing is broken. `_force_utf8_stdio()`
+is added anyway, at the top of `main()`, because the defect arrives with the next
+character someone adds and it arrives as a crash on a user's machine that nobody
+can reproduce interactively -- jcm shipped exactly that for an unknown number of
+releases, since it only appears through a pipe. The tests assert the mechanism
+rather than a repaired symptom, and say so.
+
+### Guards
+
+Two AST guards ported from jcodemunch-mcp, each with an **empty ratchet**: a new
+unencoded call fails, and a listed exemption that gets fixed must be deleted so
+the set cannot decay into a permanent excuse.
+
+The file-IO scanner matches the file mode **by value** rather than by argument
+position, because `open(file, mode)`, `path.open(mode)` and `wave.open(file,
+mode)` put it in three different slots -- and two earlier position-based versions
+each produced a different class of false positive. It is tested in both
+directions: correct code must not be flagged, broken code must be. A guard with
+false positives is one nobody believes, and a ratchet nobody believes collects
+exemptions.
+
+⚠ The non-vacuity floor is sized to THIS repo's tree (60+ files), not copied
+from jcm. A floor larger than the tree fails forever; a floor of 1 passes over a
+scan that collapsed to nothing.
+
+### A finding that turned out not to be one
+
+While bumping version pins I noticed `uv.lock` recording an older version than
+`pyproject.toml`, and started writing it up as drift that jcodemunch-mcp's
+`test_lockfile_version_sync.py` gate would have caught.
+
+It is not drift. **`uv.lock` is gitignored in this repo, deliberately** -- CI runs
+plain `uv sync`, not `uv sync --locked`, so a committed lock would silently change
+dependency resolution. The file is a local artifact and cannot drift across
+releases because it was never in a release.
+
+Recorded here because the near-miss is the useful part: porting jcm's lockfile
+gate would have shipped a test that fails on a fresh clone, where no `uv.lock`
+exists. jcm tracks its lock and this repo does not, and that asymmetry is a
+decision, not an oversight. Suite parity is for behaviour contracts, not for
+whatever the other repo happens to have in `tests/`.
+
 ## [1.31.2] - 2026-08-07 - a truncated response said so in a field the default config deletes
 
 `enforce_budget` trims rows and columns to fit the response token budget and

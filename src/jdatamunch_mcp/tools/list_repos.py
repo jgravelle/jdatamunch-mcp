@@ -37,7 +37,7 @@ def list_repos(storage_path: Optional[str] = None) -> dict:
     for marker in markers:
         # .repo-sha-{owner}--{repo} → owner--repo
         prefix = marker.name.removeprefix(".repo-sha-")
-        head_sha = marker.read_text().strip()
+        head_sha = marker.read_text(encoding="utf-8", errors="replace").strip()
 
         # Reconstruct owner/repo from prefix
         parts = prefix.split("--", 1)
