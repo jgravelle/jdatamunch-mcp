@@ -6,7 +6,6 @@ and used by search_data for fast value matching without touching SQLite.
 """
 
 # Re-export the constant so callers can import from this module
-from .column_profiler import VALUE_INDEX_CARDINALITY_LIMIT
 
 
 def build_value_search_index(profiles: list) -> dict:

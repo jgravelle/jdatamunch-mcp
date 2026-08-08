@@ -27,12 +27,11 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional
 
 from ..redact import redact_sql_query_text
 from ..storage.data_store import DataStore
-from .sql_log import parse_sql_log_file, SqlQueryRecord
+from .sql_log import parse_sql_log_file
 from .tables import ensure_runtime_tables
 
 

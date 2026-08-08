@@ -8,7 +8,6 @@ from ..storage.data_store import DataStore
 from ..storage.token_tracker import (
     PRICING,
     budget_status,
-    cost_avoided,
     get_per_tool_savings,
     get_session_response_tokens,
     get_total_saved,

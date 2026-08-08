@@ -3,7 +3,6 @@
 import re
 import sys
 from pathlib import Path
-from typing import Optional
 
 
 def verify_package_integrity() -> None:

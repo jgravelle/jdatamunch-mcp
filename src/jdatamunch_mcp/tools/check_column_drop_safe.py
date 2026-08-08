@@ -150,7 +150,7 @@ def _cross_dataset_matches(
             if (col.get("name") or "").lower() == target:
                 matches.append({
                     "dataset": ds_id,
-                    "type_match": col.get("type") == None,  # fill below
+                    "type_match": col.get("type") is None,  # fill below
                     "column_type": col.get("type"),
                 })
                 break

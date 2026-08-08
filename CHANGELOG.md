@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.31.4] - 2026-08-07 - A lint gate
+
+CI had no lint job. It has one now, added alongside jdocmunch-mcp.
+
+`ruff check src/` runs once on Linux, outside the test matrix, with rule
+selection and grandfathered ignores in `[tool.ruff.lint]`.
+
+### What it found here
+
+Nothing dangerous, which is worth saying plainly rather than implying the gate
+rescued this repo. **jdata was already clean on F821 (undefined names)** -- the
+rule that represents a runtime crash. jdocmunch-mcp was not, and had shipped one
+inside an `except` block, which is what prompted adding gates to both.
+
+Fixed while making the gate green: 9 unused imports, 3 f-strings with no
+placeholders, and one `== None` that should be `is None` (a plain dict `.get()`,
+not a pandas elementwise comparison -- checked before changing it). All
+mechanical; the suite is unchanged at 794 passed.
+
+Grandfathered with counts and reasons, not silently excluded: `E702` (8 terse
+one-line guards) and `F841` (2 dead locals).
+
+### One thing deliberately not copied from jcm
+
+jcodemunch-mcp's lint job runs `uv sync --locked`. That would **fail here**:
+`uv.lock` is gitignored in this repo, so there is no lock to honour. The job uses
+plain `uv sync --group dev`, matching this repo's own test job.
+
+Second time in two releases that copying a sibling's step verbatim would have
+broken something. Copy the intent, not the step.
+
 ## [1.31.3] - 2026-08-07 - Text-mode IO and CLI output declare their encoding
 
 Suite parity with jcodemunch-mcp, which swept three directions of the same cp1252

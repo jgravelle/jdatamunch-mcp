@@ -42,3 +42,31 @@ jobs:
             exit 1
           fi
           echo "OK: No sensitive paths found in sdist."
+
+  lint:
+    # Platform-independent, so run once rather than across the test matrix.
+    #
+    # Added 2026-08-07. This repo had no lint gate, and adding one immediately
+    # surfaced a latent NameError (ruff F821) that had shipped in a release.
+    #
+    # NOTE: `uv sync` WITHOUT `--locked`, matching the test job above -- uv.lock
+    # is gitignored in this repo, so `--locked` (which jcodemunch-mcp uses, and
+    # tracks its lock) would fail here. Copy the intent, not the step.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Ruff lint (src/)
+        # Rule selection + grandfathered ignores live in [tool.ruff.lint] in
+        # pyproject.toml. Keep the gate green: fix the finding, or justify a new
+        # ignore in the same change.
+        run: uv run ruff check src/

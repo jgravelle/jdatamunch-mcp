@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from ..config import get_index_path, get_max_rows
+from ..config import get_index_path
 from .index_local import index_local
 
 logger = logging.getLogger(__name__)

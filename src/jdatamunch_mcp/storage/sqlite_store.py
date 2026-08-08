@@ -685,7 +685,7 @@ def query_aggregate(
             ob = _qcol(order_by)
         sql += f" ORDER BY {ob} {direction}"
 
-    sql += f" LIMIT ?"
+    sql += " LIMIT ?"
 
     # Count total groups (must include HAVING so total reflects post-filter cardinality)
     count_inner = (

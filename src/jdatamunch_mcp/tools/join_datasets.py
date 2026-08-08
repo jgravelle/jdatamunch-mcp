@@ -7,7 +7,7 @@ from typing import Optional
 
 from ..config import get_index_path
 from ..storage.data_store import DataStore
-from ..storage.sqlite_store import _qcol, _build_where, MAX_ROWS_RETURNED
+from ..storage.sqlite_store import _qcol, _build_where
 from ..storage.token_tracker import estimate_savings, record_savings, cost_avoided
 
 # Hard caps
@@ -217,8 +217,8 @@ def join_datasets(
 
     try:
         conn = sqlite3.connect(":memory:")
-        conn.execute(f"ATTACH DATABASE ? AS db_a", (str(sqlite_a),))
-        conn.execute(f"ATTACH DATABASE ? AS db_b", (str(sqlite_b),))
+        conn.execute("ATTACH DATABASE ? AS db_a", (str(sqlite_a),))
+        conn.execute("ATTACH DATABASE ? AS db_b", (str(sqlite_b),))
         conn.execute("PRAGMA query_only=1")
         conn.row_factory = sqlite3.Row
 
