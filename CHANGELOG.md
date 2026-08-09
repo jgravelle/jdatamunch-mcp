@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.31.6] - 2026-08-09 - JSON-RPC gets a private stdout
+
+Suite parity with jdocmunch-mcp 1.129.0 ([jdoc#110](https://github.com/jgravelle/jdocmunch-mcp/issues/110)).
+Found by auditing the siblings after fixing it there, not by a report.
+
+The MCP stdio transport writes framed JSON to stdout, so any other write to
+that stream breaks a response.
+
+⚠⚠ `contextlib.redirect_stdout` never closed this. It rebinds `sys.stdout` and
+nothing more, so it does not cover a C extension calling `write(1, ...)`
+(tqdm, tokenizers, torch), a subprocess that inherited fd 1, or another thread.
+`embeddings.py:93` builds a `SentenceTransformer` **inside `embed_dataset`**,
+so a first embed on a machine without the model cached downloads it mid-request
+and its native progress output goes straight at the JSON-RPC stream. jdatamunch
+has no startup warmup, so nothing pulled that load off the request path.
+
+`stdio_guard.claim_stdout()` duplicates the real stdout, points fd 1 at stderr,
+and hands the duplicate to `stdio_server(stdout=...)`, which already accepts
+one. Afterwards fd 1 **is** stderr for the whole process and the framed stream
+is reachable only through the transport's handle.
+
+⚠ Chatter written by a launcher *before* this process starts is already in the
+pipe and cannot be retracted after exec. This closes everything written from
+our own process onward.
+
+⚠ Fails open under pythonw or a replaced `sys.stderr`: the swap is skipped, the
+server starts as before, and says so on stderr.
+
+`tests/test_stdio_guard.py`, 8 tests, driven through real subprocesses — an
+in-process test of a descriptor-level swap would be testing the mock.
+
 ## [1.31.5] - 2026-08-07 - The lint gate actually runs
 
 v1.31.4 added a lint job that could not execute. Two defects in it, both found by

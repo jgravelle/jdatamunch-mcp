@@ -2180,14 +2180,36 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 async def run_server():
     """Run the MCP server."""
+    import anyio
+
     from jdatamunch_mcp import __version__
+    from jdatamunch_mcp.stdio_guard import claim_stdout
     from mcp.server.stdio import stdio_server
+
+    # Suite parity with jdoc#110. Take the real stdout for JSON-RPC and point
+    # fd 1 at stderr BEFORE anything else runs, so no library, thread or child
+    # process can reach the framed stream. `embeddings.py` builds a
+    # SentenceTransformer inside `embed_dataset`, and a first embed on a
+    # machine without the model cached downloads it mid-request.
+    _private_stdout, _stdout_swapped = claim_stdout()
 
     print(
         f"jdatamunch-mcp {__version__} by jgravelle · https://github.com/jgravelle/jdatamunch-mcp",
         file=sys.stderr,
     )
-    async with stdio_server() as (read_stream, write_stream):
+    if not _stdout_swapped:
+        # ⚠ Worth saying out loud: this is the configuration where a stray
+        # library write can still corrupt a response.
+        print(
+            "[jdatamunch-mcp] could not isolate stdout for JSON-RPC; library "
+            "output on stdout may corrupt framing",
+            file=sys.stderr,
+        )
+
+    _stdout_arg = (
+        anyio.wrap_file(_private_stdout) if _private_stdout is not None else None
+    )
+    async with stdio_server(stdout=_stdout_arg) as (read_stream, write_stream):
         await server.run(
             read_stream,
             write_stream,

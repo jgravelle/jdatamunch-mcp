@@ -1,6 +1,6 @@
 [project]
 name = "jdatamunch-mcp"
-version = "1.31.5"
+version = "1.31.6"
 description = "Token-efficient MCP server for tabular data retrieval via CSV/Excel/Parquet/JSONL indexing"
 readme = "README.md"
 requires-python = ">=3.10"
