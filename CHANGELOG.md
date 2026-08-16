@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.31.7] - 2026-08-16 - Eleven tools that graded something without saying what they did not grade
+
+Suite-wide pass against the tool-description rubric in
+[arXiv:2602.14878](https://arxiv.org/abs/2602.14878); method and numbers in
+jcodemunch-mcp `benchmarks/description_smells/`. jdatamunch carried the Unstated
+Limitation smell on 20 tools, 11 of which were real gaps.
+
+The health and suggestion tools were the worst of it, and in the way that matters
+most for a data tool: they graded something without saying what they were not
+grading. `get_dataset_health` now says it grades structure and completeness, not
+whether the values are right. `validate_index` says it checks the integrity of the
+index, never the correctness of the underlying data. `suggest_keys` says its
+candidates come from profile statistics and should be confirmed against the source
+system before anyone treats one as the key.
+
+`list_datasets` was one sentence and is now three.
+
 ## [1.31.6] - 2026-08-09 - JSON-RPC gets a private stdout
 
 Suite parity with jdocmunch-mcp 1.129.0 ([jdoc#110](https://github.com/jgravelle/jdocmunch-mcp/issues/110)).

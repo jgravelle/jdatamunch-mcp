@@ -258,6 +258,8 @@ def _all_tools() -> list[Tool]:
                 "Index a local data file (CSV, Excel, Parquet, or JSONL). Profiles all columns, "
                 "detects types, computes statistics, and loads rows into SQLite for fast filtered "
                 "retrieval. Set incremental=true (default) to skip re-indexing if file is unchanged."
+            
+                " CSV, Excel, Parquet and JSONL only; any other format is rejected."
             ),
             inputSchema={
                 "type": "object",
@@ -333,7 +335,9 @@ def _all_tools() -> list[Tool]:
         ),
         Tool(
             name="list_datasets",
-            description="List all indexed datasets with summary statistics.",
+            description=(
+                "List every indexed dataset with its row count, column count, and source file. Call it first to find the dataset name every other tool needs, and to confirm a file was actually indexed. Lists only datasets under the active storage_path."
+            ),
             inputSchema={"type": "object", "properties": {}},
         ),
         Tool(
@@ -341,6 +345,8 @@ def _all_tools() -> list[Tool]:
             description=(
                 "List GitHub repositories indexed via index_repo. Shows repo name, "
                 "HEAD SHA, dataset count, total rows, and dataset names for each repo."
+            
+                " Covers repos indexed with index_repo only; a dataset added by index_local is not listed here."
             ),
             inputSchema={"type": "object", "properties": {}},
         ),
@@ -466,6 +472,8 @@ def _all_tools() -> list[Tool]:
                 "(no injection). Operators: eq, neq, gt, gte, lt, lte, contains, in, is_null, between. "
                 "Use columns=[] to project — reduces tokens significantly on wide tables. "
                 "Prefer aggregate() for summaries over paginating through rows."
+            
+                " Returns at most limit rows (default 50); page with offset instead of raising it."
             ),
             inputSchema={
                 "type": "object",
@@ -615,6 +623,8 @@ def _all_tools() -> list[Tool]:
                 "Use columns=[] on wide tables to reduce response size. "
                 "Pass seed (int) with method='random' for deterministic, "
                 "reproducible sampling."
+            
+                " A sample shows shape, not distribution; use get_distribution when you need the spread."
             ),
             inputSchema={
                 "type": "object",
@@ -898,7 +908,7 @@ def _all_tools() -> list[Tool]:
         ),
         Tool(
             name="get_session_stats",
-            description="Return cumulative token savings and cost avoided across all tool calls.",
+            description="Return cumulative token savings and cost avoided across all tool calls. Savings are modelled estimates, not per-call measurements.",
             inputSchema={"type": "object", "properties": {}},
         ),
         Tool(
@@ -909,6 +919,8 @@ def _all_tools() -> list[Tool]:
                 "list against index.json, and verifies index.json content "
                 "hash. Reports stale-lock state from interrupted index_local "
                 "runs. Returns overall_status: 'ok' | 'warning' | 'error'."
+            
+                " Checks the integrity of the index, never the correctness of the underlying data."
             ),
             inputSchema={
                 "type": "object",
@@ -946,6 +958,8 @@ def _all_tools() -> list[Tool]:
                 "null severity, type-confidence, constant-column count, "
                 "primary-key presence, semantic-typing coverage, and drift "
                 "history into a single score with a structured breakdown."
+            
+                " Grades structure and completeness, not whether the values are right."
             ),
             inputSchema={
                 "type": "object",
@@ -961,6 +975,8 @@ def _all_tools() -> list[Tool]:
                 "Rank primary-key candidates for a dataset (B5). Each entry "
                 "carries a confidence score plus the reasons that raised it "
                 "(integer column, UUID format, no nulls, exact-count unique)."
+            
+                " Candidates are ranked from profile statistics, so confirm against the source system before treating one as the key."
             ),
             inputSchema={
                 "type": "object",
@@ -994,6 +1010,8 @@ def _all_tools() -> list[Tool]:
                 "equal-width bins between min/max; datetime → time-bucket "
                 "bins; categorical / string → top-n + 'other' bucket. "
                 "Token-cheap way to ask 'what does this column look like?'."
+            
+                " Bin counts only (default 20 bins); it never returns the underlying rows."
             ),
             inputSchema={
                 "type": "object",
@@ -1231,6 +1249,8 @@ def _all_tools() -> list[Tool]:
                 "(`email` vs `email_address`), or detect the same conceptual "
                 "column spread across multiple datasets. Mirrors jcm's "
                 "find_similar_symbols."
+            
+                " Every signal is heuristic, so a high score means investigate, not merge."
             ),
             inputSchema={
                 "type": "object",
@@ -1350,6 +1370,8 @@ def _all_tools() -> list[Tool]:
                 "name_exact, name_substr, name_word, ai_summary_word, value_exact, "
                 "value_substr, type_boost, bm25_scale, semantic_scale, "
                 "default_semantic_weight."
+            
+                " Affects search_data ranking only; no other tool reads these weights."
             ),
             inputSchema={
                 "type": "object",
