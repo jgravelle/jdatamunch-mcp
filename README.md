@@ -54,21 +54,38 @@ Typical latencies from the same run: `describe_column` on a single column, 22–
 
 **Requirements:** Python 3.10+, any MCP-compatible client.
 
-```bash
-pip install jdatamunch-mcp
-```
-
-> **Ubuntu 24.04+ / Debian 12+:** system Python is externally managed (PEP 668). Use `pipx install jdatamunch-mcp` or `uv tool install jdatamunch-mcp`.
+There is no install step. `jdatamunch-mcp` is a stdio MCP server with no CLI subcommands, so nothing needs to land on your `PATH` — point your client at `uvx` and it fetches and runs the server on demand.
 
 **Claude Code setup:**
 
 ```bash
-claude mcp add jdatamunch uvx jdatamunch-mcp
+claude mcp add jdatamunch -- uvx jdatamunch-mcp
 ```
 
-Restart Claude Code, then type `/mcp` — `jdatamunch` should be listed. That listing is the verification step: `jdatamunch-mcp` is a stdio MCP server with no CLI subcommands, so running it directly just waits on stdin.
+Nothing else. [Don't have `uv` yet?](https://docs.astral.sh/uv/getting-started/installation/)
 
-Additional file formats (Excel, Parquet) pull optional extras — see [supported formats](#supported-formats). Full per-client setup, including Claude Desktop, Cursor, and Windsurf: [QUICKSTART.md](QUICKSTART.md).
+Reading Excel or Parquet? Those pull [optional extras](#supported-formats), which `uvx` takes on the `--from` argument:
+
+```bash
+claude mcp add jdatamunch -- uvx --from "jdatamunch-mcp[excel,parquet]" jdatamunch-mcp
+```
+
+<details>
+<summary><b>Prefer a persistent install?</b></summary>
+
+| Command | Use it when |
+|---|---|
+| `uv tool install jdatamunch-mcp` | You want it resolved once instead of per-launch |
+| `pipx install jdatamunch-mcp` | You already standardise on pipx |
+| `pip install jdatamunch-mcp` | Inside a virtualenv you manage yourself. ⚠ Refused on PEP 668 distros (Ubuntu 24.04+, Debian 12+) — use one of the two above. |
+
+Extras take the usual bracket form here: `uv tool install "jdatamunch-mcp[excel,parquet]"`. Registering the server still works the same way; substitute `jdatamunch-mcp` for `uvx jdatamunch-mcp` in the `claude mcp add` line above.
+
+</details>
+
+Restart Claude Code, then type `/mcp` — `jdatamunch` should be listed. That listing is the verification step; running the server directly just waits on stdin.
+
+Full per-client setup, including Claude Desktop, Cursor, and Windsurf: [QUICKSTART.md](QUICKSTART.md).
 
 ---
 
