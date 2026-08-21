@@ -192,6 +192,31 @@ src/jdatamunch_mcp/
 - **Release** (`.github/workflows/release.yml`, added v1.16.0): on every push to master, *after Tests passes*, auto-tags + creates a GitHub release when `pyproject.toml`'s version has no release yet. **Builds the wheel + sdist (`python -m build`) and attaches both to the release** — the console one-click installer reads the latest release's `.whl`, so a release MUST carry it. No-op for docs-only / non-bump pushes. Gated via `workflow_run` + `conclusion == 'success'` so a red commit never gets tagged. **Don't hand-tag on a version bump** — the workflow does it (hand-creating a release first just makes the workflow no-op, which is fine). (Asset-attaching added 2026-06-28 after v1.15.0/v1.16.0 shipped bare and broke the console installer; v1.16.0's wheel was backfilled by hand.)
 - **PyPI is still manual**: `python -m build` + `twine upload dist/*` from a machine with `.pypirc`. CI has no PyPI credential. To automate, add a publish job using PyPI Trusted Publishing (OIDC, no stored secret) once the publisher is configured on pypi.org.
 
+## Maintaining this file
+
+⚠⚠ **`CLAUDE.md` is budgeted at 130,000 chars, gated by
+`tests/test_claude_md_size.py`.** The harness stops loading a project brief at
+150,000; the gap is deliberate, because a ceiling that fires at the cliff fires
+for the first time in the session it breaks. This file is ~54,600 today, so
+nothing needs rotating yet — the gate is armed in advance.
+
+⚠ When it fires, **rotate into the archive path named by `ARCHIVE` in that test,
+never delete.** The path is deliberately not repeated here: the gate asserts that
+a pointer and an archive imply each other in BOTH directions, so writing the path
+into this file before the archive exists is itself a failure — as it was when
+this section was first drafted, and the gate caught it.
+
+⚠ The gate also asserts the archive is tracked by git. `docs/` is not gitignored
+here, but it is in jcodemunch-mcp, where the first attempt at exactly this
+rotation wrote the archive somewhere a fresh clone would never see it. **"Does
+the file exist" answers a question about one working tree, not about the
+repository.**
+
+⚠ **The sibling repo is why this exists.** jcm's `CLAUDE.md` hit 200,543 chars
+and stopped loading on 2026-08-21 while its size practice was being followed:
+the practice named one section, and the growth was in the sections it did not
+name. **A rule that names one section licenses every other section to grow.**
+
 ## Benchmarks
 Real production dataset (LAPD crime records, 1M rows):
 
