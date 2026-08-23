@@ -2,6 +2,42 @@
 
 ## [Unreleased]
 
+### Fixed - a skipped module hid how many tests it held
+
+`tests/test_excel_parser.py` reported as **one** `1 skipped` line while holding
+**29 tests, 19 of which pass on an ordinary dev box.** The suite summary read
+`817 passed, 2 skipped` and would have read exactly the same if those 19 had
+run. Test-only change; nothing user-facing moves.
+
+⚠⚠ **The mechanism: `pytest.importorskip` at MODULE scope raises during
+IMPORT**, so the whole file collapses to a single line however many tests are
+in it. Three sites did this - both classes in the excel module and the parquet
+module's `pytestmark`.
+
+⚠ **The construct was inert on its own terms as well**, which is why nobody
+read it twice:
+
+    not pytest.importorskip("xlrd", reason="...") or False
+
+`importorskip` returns the MODULE, so `not module` is False and `False or
+False` is False. **The `skipif` condition never fired.** Every skip came from
+the import side effect - the part that hides the count.
+
+Replaced with `importlib.util.find_spec(...) is None`, which asks the same
+question without raising: the module imports, every test is collected, and only
+the tests needing the absent package report as skipped.
+
+⚠⚠ **Found by comparing TOTALS across interpreters, not passed counts:**
+819 local against 839 under `uv run --python 3.13`. From `N passed` alone an
+absent module looks like nothing at all. The two now agree at 841.
+
+⚠ `tests/test_optional_dep_skips_are_visible.py` bans module-scope
+`importorskip` across the suite and separately asserts both modules yield real
+test items - the outcome as well as the mechanism, so a future rewrite that
+hides them another way still fails. Verified by reintroducing the pattern.
+Inside a fixture or test body `importorskip` stays correct and visible;
+`conftest.py` uses it that way deliberately.
+
 ## [1.31.9] - 2026-08-23 - The one string that survives tool deferral
 
 ### Added - the one string that survives tool deferral

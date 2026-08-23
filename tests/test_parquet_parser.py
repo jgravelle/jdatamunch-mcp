@@ -1,12 +1,19 @@
 """Tests for Parquet parser and index_local integration."""
 
 import pytest
+from importlib.util import find_spec
 
 from jdatamunch_mcp.tools.index_local import index_local
 from jdatamunch_mcp.storage.data_store import DataStore
 
+# ⚠⚠ `find_spec`, NOT a module-scope `pytest.importorskip`. importorskip RAISES
+# during import, so the whole file collapses to one "1 skipped" line however
+# many tests it holds -- 21 of them here, reported as 1. A suite summary then
+# reads the same whether those tests ran or not. find_spec asks the same
+# question without raising: the module imports, every test is collected, and
+# only the ones needing the absent package report as skipped.
 pytestmark = pytest.mark.skipif(
-    not pytest.importorskip("pyarrow", reason="pyarrow not installed"),
+    find_spec("pyarrow") is None,
     reason="pyarrow not installed",
 )
 

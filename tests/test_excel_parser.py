@@ -1,6 +1,7 @@
 """Tests for Excel parser (.xlsx and .xls)."""
 
 import pytest
+from importlib.util import find_spec
 
 from jdatamunch_mcp.parser import parse_file
 from jdatamunch_mcp.tools.index_local import index_local
@@ -11,8 +12,14 @@ from jdatamunch_mcp.storage.data_store import DataStore
 # .xlsx tests (openpyxl)
 # ---------------------------------------------------------------------------
 
+# ⚠⚠ `find_spec`, NOT a module-scope `pytest.importorskip`. importorskip RAISES
+# during import, so the whole file collapses to one "1 skipped" line however
+# many tests it holds -- 21 of them here, reported as 1. A suite summary then
+# reads the same whether those tests ran or not. find_spec asks the same
+# question without raising: the module imports, every test is collected, and
+# only the ones needing the absent package report as skipped.
 @pytest.mark.skipif(
-    not pytest.importorskip("openpyxl", reason="openpyxl not installed") or False,
+    find_spec("openpyxl") is None,
     reason="openpyxl not installed",
 )
 class TestXlsxParser:
@@ -86,7 +93,7 @@ class TestXlsxParser:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.skipif(
-    not pytest.importorskip("xlrd", reason="xlrd not installed") or False,
+    find_spec("xlrd") is None,
     reason="xlrd not installed",
 )
 class TestXlsParser:
