@@ -1,6 +1,7 @@
 # jdatamunch-mcp — Project Brief
 
 ## Current State
+- **Unreleased - the one string that survives tool deferral.** The MCP `initialize` response now carries an `instructions` string; it did not before, because the transport called `create_initialization_options()` bare and the field went out empty. ⚠⚠ **Invisible in a normal session, CONCENTRATED in a deferred one**: a host over its schema budget ships tool NAMES and withholds the JSONSchemas, so an agent sees 39 bare strings and none of the descriptions. The spec delivers `instructions` on a SEPARATE TRACK from the tool list, so it arrives whole - in a plain MCP client it is the entire steering budget this server gets. 897 chars against a 1,000 cap. ⚠ Also sets `Server(..., version=__version__)`: without it the SDK reports ITS OWN version in `serverInfo`. ⚠ `__version__` is `"unknown"` under `PYTHONPATH=src`, so a green test does NOT prove the wire carries a real number. ⚠⚠ **Ported from jcodemunch-mcp v1.108.292 - both defects were present here unchanged, and neither had a symptom anyone could report.** ⚠⚠ **The port also reproduced a NameError in BOTH repos** (`logger` through a module-level name neither server.py defines) and **only jdoc caught it** - jdata's suite was GREEN with the identical bug, because it had no F821 gate. The gate is ported here as `tests/test_undefined_names.py`. **A setting fixed in one repo of a suite is fixed in one repo, and that applies to the GATES as much as the code.** `tests/test_mcp_instructions.py` binds the prose to the catalog; all three guards were verified by reintroducing the defect each names.
 - **Version:** 1.31.8 — **the licence became something you can point at.** PyPI published NEITHER `info.license` NOR `info.license_expression` for this package, so an organisation with a commercial licence had **nothing to allowlist — not a wrong identifier, no identifier.** PEP 639 now: `LicenseRef-jDataMunch-Dual-Use` + `license-files`. Reported and fixed by @marcelruhf (jdata #4), a PLATFORM CUSTOMER. ⚠⚠ **He named ONE surface and the licence was declared on THREE** — plugin.json and the mcpb manifest both said `LicenseRef-Dual-Use`, no product prefix, so an allowlist still needed two entries. He ported jcm #518's ratchet here HIMSELF, unasked, and **his version of the version-suffix check is better than ours**: a `Version` line and a suffix imply each other BOTH WAYS, where ours assumed a suffix exists. This LICENSE states no version, which is exactly where ours would have been wrong. Adopted back into jcm as #520. ⚠⚠ **His PR had HELD CI and read as tested** — only `license/cla` was reported, while two runs sat `action_required` and never executed. `fork-pr-contributor-approval` was `first_time_contributors`; relaxed to match jcm, which fixed it 2026-08-13. **A setting fixed in one repo of a suite is fixed in one repo.** ⚠ `He's kinda full of himself.` removed from LICENSE condition 2 — it stays in jcm's README. EDITORIAL: it grants and removes nothing, so the identifier is untouched and no allowlist is churned. ⚠ PyPI metadata is IMMUTABLE per version: 1.31.7 and earlier keep EMPTY licence fields permanently. ⚠ Suite **807 passed / 1 skipped** local; 3.13 CI-env **827 passed / 1 skipped, 828 collected**. ⚠ **The 21-test gap is ENTIRELY `test_excel_parser.py`, proven by an ignore-diff rather than assumed**: 828 collected on 3.13, 807 with that file ignored, and 807 is the local total exactly. The Excel reader dependency is absent locally so the module is not collected AT ALL — invisible from `N passed` and from the skip count, visible only in the TOTAL.
 - **Version:** 1.31.7 — **eleven tools graded something without saying what they did NOT grade.** Suite-wide pass against the six-component tool-description rubric in [arXiv:2602.14878](https://arxiv.org/abs/2602.14878) (856 tools / 103 servers; **97.1% carry at least one smell**); method, both scoring frames and the dated numbers live in jcm `benchmarks/description_smells/`. jdata was flagged on 20 tools for Unstated Limitation, **11 of them real gaps** and the rest phrasing the scanner failed to match. ⚠⚠ **The health and suggestion tools were the worst of it, in the way that matters most for a DATA server**: they graded something and never said what they were not grading. `get_dataset_health` grades structure and completeness, **not whether the values are right**; `validate_index` checks the integrity of the INDEX, never the correctness of the underlying data; `suggest_keys` ranks from PROFILE STATISTICS and says to confirm against the source system before treating a candidate as the key. ⚠ **A confidence score on a key candidate reads as authority unless the description says where the number came from.** `list_datasets` was one sentence and is now three. ⚠ Every clause is derived from the tool's own guard clauses or schema defaults (`get_rows`'s `limit` default, `get_distribution`'s 20 bins), not written to satisfy the rubric. ⚠⚠ **Report BOTH scoring frames or neither** — the paper's scanner is fed name + description text only and never sees `inputSchema`, so it scores schema-documented parameters 1/5 by its own wording. Suite **802 passed / 1 skipped** local (803 total), and the release adds no tests, so it reproduces the pre-bump run exactly. ⚠⚠ **The 3.13 CI-env reproduce collects 823, TWENTY-ONE MORE, and both runs report ONE skip** — the extra module is `test_excel_parser.py`, absent locally because the Excel reader dependency is not installed in this env, so it is not collected at all rather than collected-and-skipped. **A whole module going missing is invisible from `N passed` and invisible from the skip count; only the TOTAL shows it.** 3.13: **822 passed / 1 skipped**. Compare totals across interpreters, never passed counts.
 - **Version:** 1.31.6 — **JSON-RPC owns a PRIVATE stdout.** Suite parity with jdocmunch 1.129.0 ([jdoc#110](https://github.com/jgravelle/jdocmunch-mcp/issues/110)); found by auditing the siblings after fixing it there, **not** by a report. ⚠⚠ **`redirect_stdout` never closed this** — it rebinds `sys.stdout` ONLY, so it does not cover a C extension calling `write(1, ...)`, a subprocess that inherited fd 1, or another thread. `embeddings.py:93` builds a `SentenceTransformer` **inside `embed_dataset`**, so a first embed on a machine without the model cached downloads it MID-REQUEST, straight at the framed stream. ⚠ **This is the same lazy-ST/`to_thread` family as issue #3** (MotoMato85's Windows loader-lock hang) from the other direction: #3 was WHERE the import ran, this is WHAT IT PRINTS while it runs; `warm_up_provider()` moves the import to the main thread but nothing kept its output off stdout. `stdio_guard.claim_stdout()` dups the real stdout, hands the duplicate to `stdio_server(stdout=...)`, then points fd 1 at stderr — after which fd 1 **IS** stderr process-wide. ⚠ Chatter a launcher wrote BEFORE we exec is already in the pipe and is NOT covered. ⚠ Fails OPEN under pythonw or a replaced `sys.stderr`, and says so. ⚠ `tests/test_stdio_guard.py` (8) runs REAL SUBPROCESSES — an in-process test of a file-descriptor swap tests the mock.
@@ -205,6 +206,50 @@ src/jdatamunch_mcp/
 - **Tests** (`.github/workflows/test.yml`): matrix ubuntu+windows x py3.10-3.13 on push/PR to master; pytest + sdist sensitive-path check.
 - **Release** (`.github/workflows/release.yml`, added v1.16.0): on every push to master, *after Tests passes*, auto-tags + creates a GitHub release when `pyproject.toml`'s version has no release yet. **Builds the wheel + sdist (`python -m build`) and attaches both to the release** — the console one-click installer reads the latest release's `.whl`, so a release MUST carry it. No-op for docs-only / non-bump pushes. Gated via `workflow_run` + `conclusion == 'success'` so a red commit never gets tagged. **Don't hand-tag on a version bump** — the workflow does it (hand-creating a release first just makes the workflow no-op, which is fine). (Asset-attaching added 2026-06-28 after v1.15.0/v1.16.0 shipped bare and broke the console installer; v1.16.0's wheel was backfilled by hand.)
 - **PyPI is still manual**: `python -m build` + `twine upload dist/*` from a machine with `.pypirc`. CI has no PyPI credential. To automate, add a publish job using PyPI Trusted Publishing (OIDC, no stored secret) once the publisher is configured on pypi.org.
+
+## Standing lessons (suite-wide)
+
+Drawn from jcodemunch-mcp 1.108.291 (2026-08-22) and recorded here because each
+one is about how we WORK, not about that repo's code. ⚠ **The byte-mass defect itself was CHECKED HERE and is ABSENT** (2026-08-22),
+so do not re-run the audit: every `estimate_savings` call site passes
+`idx.source_size_bytes` (or `meta["file_size"]`) — the file's own size, one
+authoritative number — instead of summing over rows, columns or any other nested
+entity. **Clean by construction, and it is the pattern jcm had to be corrected
+INTO**: ask the authority rather than reconstructing its answer. Keep it that way
+if a future tool needs a savings baseline.
+
+- **A competitor's fix list is a free defect probe.** A rival shipped
+  `fix(gini): measure a file's lines as its own span, not the sum of every node`
+  and named the defect precisely enough to check ours in one query — jcm's
+  byte-concentration metric summed nested symbol spans and read 2.85x the real
+  size of the files it described. Read competitors' `fix(...)` TITLES against
+  whatever we built the same way; it is minutes, and it finds what our own tests
+  were written not to see.
+- **A ratchet can pass against the defect it names.** The guard written for that
+  fix used a depth-limited regex and walked straight past
+  `sum(int(s.get("byte_length", 0) or 0) for ...)`, two parens deep. **A green
+  ratchet and an absent ratchet look identical**, because the tree is clean when
+  you write it. Run every text-scanning guard against the defect PUT BACK, and
+  add a positive test pinning a correct shape it must not flag — otherwise the
+  ratchet becomes standing pressure to "fix" working code.
+- **A defect is not evidence against the number it did not produce.** The same
+  release nearly published a claim that the correction put a basis change behind
+  our public savings figure. It did not: the number quoted was one seat's local
+  meter, the site publishes a separate opt-in aggregate, and the tools feeding it
+  were already correct. **Trace the path from a defect to the SPECIFIC figure
+  before implicating it**, and never net coverage-conservatism (who reports)
+  against a per-call arithmetic error (one call's maths) — different axes,
+  opposite directions. If the apportionment cannot be computed, the honest output
+  is "not computable" plus the bound, never a restated number. **Not restating is
+  the conservative action, not the convenient one.**
+- **A metric that credits us is the one direction a defect must never sit.** When
+  the same shape turned up in jcm's token-savings baseline, the correction
+  LOWERED our own reported numbers and shipped in the same release rather than
+  as follow-up work. Where history could not be recomputed it was disclosed
+  (`lifetime_unattributed`, a basis generation) rather than quietly carried or
+  quietly rewritten — **a recomputed history is a guess wearing a measurement's
+  clothes.**
+
 
 ## Maintaining this file
 

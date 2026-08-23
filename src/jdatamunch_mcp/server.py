@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import json
+import logging
 import os
 import sys
 import time
@@ -55,7 +56,94 @@ from . import perf as _perf
 from .budget import enforce_budget
 from .call_tracker import record_call
 
-server = Server("jdatamunch-mcp")
+from . import __version__  # module scope: serverInfo needs it at construction
+
+server = Server("jdatamunch-mcp", version=__version__)
+
+
+# --- MCP `instructions` (initialize response) ------------------------------ #
+# The one piece of jdatamunch prose that survives TOOL DEFERRAL. When a host has
+# more tools than its schema budget allows it sends tool NAMES only and withholds
+# the JSONSchemas until a ToolSearch-style lookup fetches them. We ship 39
+# tools, so in a deferred session every tool description is invisible at exactly
+# the moment steering matters most.
+#
+# The MCP spec delivers `instructions` on a separate track from the tool list, so
+# it arrives whole even then. Two jobs, in this order:
+#   1. Defuse the deferral tax. ONE lookup loads the whole working set for the
+#      session, so the cost is a single round trip and not two calls per use.
+#   2. Say what each tool is FOR as a decision rule, not a feature summary. In a
+#      plain MCP client with no hooks and no skill listing, this string plus the
+#      tool descriptions are the entire steering budget we get.
+#
+# Ported from jcodemunch-mcp v1.108.292. A setting fixed in one repo of a suite
+# is fixed in one repo.
+#
+# ⚠ Budget: under _MCP_INSTRUCTIONS_MAX_CHARS. Nothing proves a longer one
+# survives un-truncated, and observed sibling servers sit at 660-984.
+# ⚠ Every tool named here must be a real dispatchable name;
+# `tests/test_mcp_instructions.py` binds the prose to the catalog so this cannot
+# rot into advertising a tool we do not serve.
+
+_MCP_INSTRUCTIONS_MAX_CHARS = 1000
+
+# Default host prefix for MCP tool names. The real prefix comes from whatever key
+# the user wrote in their MCP config, so this is the common case, not a promise.
+_MCP_TOOL_PREFIX = "mcp__jdatamunch__"
+
+# Named in the order an agent should reach for them, most-used first.
+_INSTRUCTION_TOOLS: tuple = (
+    ("list_datasets", "what is indexed here? Call it first."),
+    ("describe_dataset", "columns, types and row count before any query."),
+    ("search_data", "find a value when you do not know its column."),
+    ("run_sql", "a real query once you know the shape."),
+    ("describe_column", "distribution, nulls and cardinality for one column."),
+    ("sample_rows", "a handful of real rows; get_rows for a known slice."),
+)
+
+
+def _instruction_tool_names() -> list:
+    """Tool names named in the instructions, in reach-for order."""
+    return [name for name, _ in _INSTRUCTION_TOOLS]
+
+
+def _tool_search_query(prefix: str = _MCP_TOOL_PREFIX) -> str:
+    """The `select:` argument that loads every named tool in one lookup."""
+    return "select:" + ",".join(prefix + n for n in _instruction_tool_names())
+
+
+def _mcp_instructions(prefix: str = _MCP_TOOL_PREFIX) -> str:
+    """The `instructions` string for the initialize response."""
+    lines = [
+        "This project's data is indexed by jdatamunch: datasets, columns, types "
+        "and real row samples, queryable without loading a file. Prefer these "
+        "over Read/Grep/Bash for anything tabular.",
+        "",
+        "**If these tools are deferred (names shown, schemas withheld), load them "
+        'in ONE lookup:** ToolSearch "%s". One round trip for the session, '
+        "never one at a time." % _tool_search_query(prefix),
+        "",
+    ]
+    lines += ["- %s: %s" % (name, why) for name, why in _INSTRUCTION_TOOLS]
+    return "\n".join(lines)
+
+
+def _initialization_options():
+    """`create_initialization_options()` carrying our `instructions` string."""
+    opts = server.create_initialization_options()
+    if "instructions" not in type(opts).model_fields:
+        # mcp SDK predates the field (we allow >=1.10.0). Nothing to say, and
+        # nowhere to say it.
+        # `logging.getLogger(__name__)`, NOT a module-level `logger`: this module
+        # has none, and this line only runs on an SDK old enough to lack the
+        # field, so a NameError here would surface on exactly the install least
+        # able to diagnose it.
+        logging.getLogger(__name__).debug(
+            "InitializationOptions has no `instructions` field; skipping"
+        )
+        return opts
+    return opts.model_copy(update={"instructions": _mcp_instructions()})
+
 
 
 # --------------------------------------------------------------------------- #
@@ -2235,7 +2323,7 @@ async def run_server():
         await server.run(
             read_stream,
             write_stream,
-            server.create_initialization_options(),
+            _initialization_options(),
         )
 
 
