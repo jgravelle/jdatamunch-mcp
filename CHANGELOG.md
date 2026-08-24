@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.31.10] - 2026-08-23 - A skipped module hid how many tests it held
+
 ### Fixed - a skipped module hid how many tests it held
 
 `tests/test_excel_parser.py` reported as **one** `1 skipped` line while holding
