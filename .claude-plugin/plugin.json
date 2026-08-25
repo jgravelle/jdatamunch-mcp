@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "jdatamunch",
   "displayName": "jDataMunch",
-  "version": "1.31.10",
+  "version": "1.31.11",
   "description": "Token-efficient MCP server for tabular data retrieval via CSV/Excel/Parquet/JSONL indexing",
   "author": {
     "name": "J. Gravelle",

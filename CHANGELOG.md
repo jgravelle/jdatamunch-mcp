@@ -2,6 +2,57 @@
 
 ## [Unreleased]
 
+## [1.31.11] - 2026-08-24 - Two guards in the absence path, one tripped by our own write
+
+### Fixed - two guards in the absence-verdict path, one tripped by our own write
+
+Found by sweeping this repo for the four defect classes jcodemunch-mcp hit in
+its 1.108.296. Neither had a symptom anyone could report: both produced a
+verdict that merely READ as cautious.
+
+**(1) The index-rewritten probe was tripped by jData's own write.**
+`index_changed_since_load` was sampled AFTER the scan, and `_semantic_scores`
+lazily embeds any column with no vector yet and PERSISTS it
+(`set_many`/`set_meta`) into the same `data.sqlite` the probe stats. So the
+FIRST semantic search of every dataset reported the dataset as rewritten
+underneath itself.
+
+⚠⚠ **Measured, same query and same data, zero rows both times: the first
+search returned `degraded` ("absence is NOT proven") and the second returned
+`absent` ("strong evidence no such column/value is present"). `index_changed`
+was the ONLY differing input to `build_verdict`** — `semantic_available` was
+True in both. The wrong verdict is the one that fires on every dataset's first
+search, and it withdraws the absence claim this product exists to make.
+
+⚠ Sampled before any channel runs now. That does not weaken the guard: an mtime
+is a PROXY for "rows were rewritten by someone else", and our own write is a
+known false positive for it, so excluding it repairs the proxy. A rebuild
+already in flight when the scan starts is still caught; one that begins
+mid-scan is not, and `_meta.rewrite_probe` says so rather than leaving a reader
+to assume the probe covers the whole call.
+
+⚠ A pure `get_all()` does NOT move the mtime despite `_connect()` running
+PRAGMA and `executescript` on every connection — measured, delta 0. Only the
+lazy-embed write does. The first reading of this was wrong in the direction of
+overstating it.
+
+**(2) The `degraded` note named a cause that was not the cause.** `_NOTES` is
+keyed on STATE, and two conditions produce `degraded`. An index-rewritten
+degrade was therefore served the semantic-channel text — "the embedding channel
+was unavailable ... Configure an embedding provider (or run embed_dataset)" —
+in calls where `semantic_available` was True and the channel had just been used
+successfully. ⚠⚠ **It did not merely omit the cause, it asserted a different
+one and prescribed a fix for a problem the caller did not have.** `_note_for`
+keys on the cause; the semantic wording is unchanged and still reached by its
+own path. ⚠ An unrecognised cause falls back to the state note, so a future
+third cause is UNSPECIFIC rather than wrong — a gap, never a false statement.
+
+`tests/test_verdict_self_tripped_probe.py` (11). Each fix was run against the
+reintroduced defect, and each revert turns exactly its own tests red. The
+lazy-embed write is separately asserted to still happen, so the regression
+cannot start passing because the precondition quietly disappeared.
+
+
 ## [1.31.10] - 2026-08-23 - A skipped module hid how many tests it held
 
 ### Fixed - a skipped module hid how many tests it held
