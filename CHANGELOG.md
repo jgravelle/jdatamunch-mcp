@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.31.12] - 2026-08-24 - The sdist credential guard
+
 ### Added - the sdist credential guard, ported by intent from jcodemunch-mcp
 
 Test-only. `tests/test_build.py` (8) — jcm has had this since its own leak
