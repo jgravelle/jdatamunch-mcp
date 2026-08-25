@@ -199,6 +199,30 @@ def search_data(
     if idx is None:
         return {"error": f"NOT_INDEXED: dataset {dataset!r} is not indexed."}
 
+    # ⚠⚠ Sampled HERE, before any channel runs, and never after.
+    #
+    # The probe compares `data.sqlite`'s mtime against the value stamped at
+    # load. `_semantic_scores` below LAZILY EMBEDS any column with no vector
+    # yet and PERSISTS it (`set_many`/`set_meta`) into that same file, so a
+    # sample taken after the scan reports the dataset as rewritten underneath
+    # us — about a write we performed ourselves.
+    #
+    # Measured before this moved: on the FIRST semantic search of a dataset a
+    # zero-result query returned `degraded` ("absence is NOT proven"); the
+    # SECOND identical query, with nothing left to embed, returned `absent`
+    # ("strong evidence no such column/value is present"). Same query, same
+    # data, opposite verdicts — and the wrong one is the one that fires on
+    # every dataset's first search, downgrading the absence claim this product
+    # exists to make.
+    #
+    # Sampling earlier does not weaken the signal. An mtime is a PROXY for
+    # "rows were rewritten by someone else", and our own write is a known
+    # false positive for it, so excluding it repairs the proxy rather than
+    # relaxing the guard. A rebuild already in flight when the scan starts is
+    # still caught; one that begins mid-scan is not, and `_meta.rewrite_probe`
+    # says so rather than leaving it to be inferred.
+    index_changed_at_start = index_changed_since_load(idx)
+
     w = load_effective_weights(dataset, storage_path)
     if semantic_weight is None:
         semantic_weight = w["default_semantic_weight"]
@@ -321,6 +345,10 @@ def search_data(
     }
     if sem_scores:
         meta["semantic_enabled"] = True
+    meta["rewrite_probe"] = (
+        "sampled before the scan; a rebuild starting mid-scan is not "
+        "visible, because the semantic channel writes to the same file"
+    )
 
     # Suite-parity honesty verdict. degraded = semantic requested but the
     # embedding channel fell back to keyword-only; absent = zero matches.
@@ -334,7 +362,7 @@ def search_data(
         semantic_requested=semantic_requested,
         semantic_available=bool(sem_scores),
         lexical_used=not semantic_only,
-        index_changed=index_changed_since_load(idx),
+        index_changed=index_changed_at_start,
         did_you_mean=suggest_columns(query, idx.columns) if not results else None,
         coverage=build_coverage_disclosure(
             idx.coverage,

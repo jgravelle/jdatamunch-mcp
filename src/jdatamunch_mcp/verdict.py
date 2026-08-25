@@ -42,6 +42,34 @@ _NOTES = {
     ),
 }
 
+#: Why a `degraded` verdict is degraded. `_NOTES[STATE_DEGRADED]` remains the
+#: semantic-channel wording and is reached through `semantic_channel`, so the
+#: text callers already parse for that case is unchanged.
+_DEGRADED_NOTES = {
+    "index_rewritten": (
+        "The dataset was rewritten while this scan ran, so \"we looked and it "
+        "is not there\" describes rows that were moving as we read them; "
+        "absence is NOT proven. The embedding channel is unaffected — re-run "
+        "once the write settles rather than reconfiguring a provider."
+    ),
+}
+
+
+def _note_for(state: str, degraded_because: str = "") -> str:
+    """The note for a verdict, keyed on its CAUSE and not only its state.
+
+    Two conditions produce ``degraded`` and they call for opposite actions:
+    configure a provider, or wait for a write to finish. Keyed on state alone,
+    an index-rewritten degrade was served the semantic-unavailable text, which
+    named a channel that was working and prescribed a fix for a problem the
+    caller did not have. An unrecognised cause falls back to the state note, so
+    a future third cause is merely unspecific rather than wrong — and adding
+    one without its note is a gap, never a false statement.
+    """
+    if state == STATE_DEGRADED and degraded_because in _DEGRADED_NOTES:
+        return _DEGRADED_NOTES[degraded_because]
+    return _NOTES[state]
+
 
 def suggest_columns(
     query: str,
@@ -121,14 +149,25 @@ def build_verdict(
     ``absent`` / ``degraded`` verdicts: an absence claim must disclose what was
     excluded at index time, while ``ok`` verdicts stay lean.
     """
+    # ⚠⚠ TWO different conditions produce `degraded`, and they need different
+    # notes. Keying the note on the STATE alone gave an index-rewritten
+    # degrade the semantic-unavailable text — "the embedding channel was
+    # unavailable ... Configure an embedding provider" — in calls where a
+    # provider was configured, available and used. The note did not merely
+    # omit the cause, it asserted a different one and prescribed a fix for a
+    # problem the caller did not have. `degraded_because` is carried so the
+    # note describes what actually happened.
+    degraded_because = ""
     if semantic_requested and not semantic_available:
         state = STATE_DEGRADED
+        degraded_because = "semantic_channel"
     elif result_count == 0 and index_changed:
         # The dataset was rewritten underneath this scan, so "we looked and it
         # is not there" describes rows that were moving while we read them.
         # degraded cannot prove absence, so the refusal falls out of the
         # existing "only `absent` proves absence" check.
         state = STATE_DEGRADED
+        degraded_because = "index_rewritten"
     elif result_count == 0:
         state = STATE_ABSENT
     else:
@@ -148,7 +187,7 @@ def build_verdict(
             "lexical": "ok" if lexical_used else "off",
             "semantic": semantic_channel,
         },
-        "note": _NOTES[state],
+        "note": _note_for(state, degraded_because),
     }
     if index_changed:
         # Present ONLY as a positive detection. jData models no index
