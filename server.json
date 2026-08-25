@@ -3,12 +3,12 @@
   "name": "io.github.jgravelle/jdatamunch-mcp",
   "title": "jDataMunch MCP",
   "description": "Tabular data retrieval. Index CSV/Excel, query rows, aggregate. 99%+ savings vs raw file reads.",
-  "version": "1.31.11",
+  "version": "1.31.12",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "jdatamunch-mcp",
-      "version": "1.31.11",
+      "version": "1.31.12",
       "transport": {
         "type": "stdio"
       }

@@ -2,6 +2,47 @@
 
 ## [Unreleased]
 
+## [1.31.12] - 2026-08-24 - The sdist credential guard
+
+### Added - the sdist credential guard, ported by intent from jcodemunch-mcp
+
+Test-only. `tests/test_build.py` (8) — jcm has had this since its own leak
+(v0.2.0-0.2.5 shipped inline tokens from `.claude/settings.local.json` to PyPI
+and were yanked); this repo carried the `pyproject.toml` exclude with **no test
+behind it**.
+
+⚠⚠ **Ported by INTENT, not verbatim, and copying it would have failed on the
+first run.** jcm asserts `.claude/` appears in the repo `.gitignore`. Here that
+is FALSE: the file is ignored through the developer's GLOBAL gitignore, so
+`git status` never shows it, a fresh clone never has it, and **a CI guard that
+greps the checked-out tree cannot fire.** The pyproject exclude is not one of
+two defences here, it is the only one — which this repo's own exclude comment
+already said, and which is why the guard now inspects a real artifact instead
+of a config file. It builds the sdist with `uv build` (1.3 s; neither `build`
+nor `hatchling` is in this venv, and `uv` already is).
+
+⚠ **Non-vacuity is the specific hazard.** `.claude/settings.local.json` must
+exist in the working tree when the test runs, or an sdist omitting it proves
+nothing — absence of output would merely reflect absence of input. The
+precondition is asserted and skips VISIBLY when it does not hold, rather than
+passing quietly.
+
+⚠⚠ **Two defects in the guard itself, both caught by running it against the
+reintroduced leak rather than only against a clean tree.** (1) A substring
+check on `.claude` flagged `.claude-plugin/plugin.json`, a legitimately shipped
+MCP manifest — **a guard with false positives is one nobody believes**, and the
+broad path pattern already had it right by matching the separators. (2) The
+config test asserted `".claude/" in text` and **PASSED with `exclude` emptied
+to `[]`**, because `.claude/` also appears in the explanatory COMMENT three
+lines above the setting; it parses the TOML now. **A text-scanning ratchet a
+comment satisfies reads as coverage while asserting nothing.**
+
+With the exclude removed, 3 tests go red. Also scans artifact CONTENT, not only
+paths — a token pasted into an innocently named file passes a path check.
+`AKIAIOSFODNN7EXAMPLE` is exempted by value: it is AWS's own documentation
+placeholder and a required fixture in `tests/test_redact.py`.
+
+
 ## [1.31.11] - 2026-08-24 - Two guards in the absence path, one tripped by our own write
 
 ### Fixed - two guards in the absence-verdict path, one tripped by our own write
