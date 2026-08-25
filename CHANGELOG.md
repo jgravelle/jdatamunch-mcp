@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.31.11] - 2026-08-24 - Two guards in the absence path, one tripped by our own write
+
 ### Fixed - two guards in the absence-verdict path, one tripped by our own write
 
 Found by sweeping this repo for the four defect classes jcodemunch-mcp hit in
