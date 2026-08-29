@@ -2,6 +2,69 @@
 
 ## [Unreleased]
 
+### Fixed - the release instructions in our own brief named a command that cannot run here
+
+`CLAUDE.md`'s `## Releasing` section told a maintainer to publish with
+`python -m build` + `twine upload`. Both halves fail on this box, and the
+failure already cost a release: it stopped jdocmunch-mcp 1.132.0 mid-publish on
+2026-08-12, and that release's notes named this repo as the next victim, because
+jdata builds with hatchling too.
+
+Measured here on 2026-08-29: `uv run python -m build` dies with *No module named
+build* -- `build` is not in the project venv at all, so the documented FIRST step
+of a release cannot be run as written. The global twine validates metadata with
+the global `packaging`, which accepts `Metadata-Version` up to **2.3**, while an
+always-latest hatchling fetched into `build`'s isolated env emits 2.5.
+
+⚠⚠ **`pip install -U packaging` is the wrong fix**, which is the part worth
+writing down. That interpreter is shared, and two installed packages pin
+`packaging<25` (`langchain-core`, `streamlit`) -- upgrading breaks working
+packages to satisfy a release tool. `uvx` resolves twine and its `packaging` in
+a throwaway env, leaves the global alone, and does not rot when metadata 2.6
+arrives.
+
+⚠ **The `twine check` line is the load-bearing one, not the upload.** Without it
+a metadata failure surfaces DURING upload, possibly after the wheel is on PyPI
+and the sdist is not. A half-published version cannot be re-uploaded.
+
+⚠ The neighbouring `python -m build` in the `release.yml` bullet is **correct and
+untouched**: CI installs `build` and `twine` fresh in a clean runner, where none
+of this applies. The defect was only ever in the instruction aimed at a human.
+
+### Added - two release lessons that lived only in a gitignored skill, and a binding test
+
+Both existed in jcm's release skill, which is gitignored and therefore
+machine-local; neither had ever reached a suite brief. **A lesson stored where
+only one checkout can read it propagates to nobody.**
+
+- **Read CI before the irreversible step.** Four consecutive jcm releases
+  (.259-.262) were published, tagged and uploaded on a RED build because nobody
+  read the check. jdata's shape is its own: the GitHub release is gated on Tests
+  passing, **but PyPI is manual**, so a human can still upload against red. The
+  brief now names the `gh run list` command and says to read it before the
+  upload.
+- **The MCP registry's nested-row trap.** Each row is
+  `{server: {...}, _meta: {...}}` (schema 2025-12-11); `name`/`version`/
+  `packages[]` live under `server`, `isLatest`/`publishedAt` under
+  `_meta["io.modelcontextprotocol.registry/official"]`. **A flat `row["name"]`
+  read returns ZERO rows on a publish that completely succeeded** -- measured at
+  0 of 45 on a confirmed-good publish. It is a second false negative on top of
+  the known paging trap and, unlike that one, it **survives `&limit=100`**, so
+  the documented remedy does not help and the symptom is indistinguishable from
+  a failed publish. **Never re-publish on a zero-row read.** jdata has been in
+  the registry since 2026-08-06 and had no warning written down.
+
+`tests/test_release_tooling_binding.py` (11) binds each documented command to the
+thing it must agree with, so the next drift fails CI instead of failing a
+release. ⚠ It asserts on the **fenced commands** of the manual-PyPI bullet, not
+on its prose -- the prose legitimately names `python -m build` to say it does not
+work, and the first draft of the guard flagged exactly that. It also pins the
+CI-workflow bullet's `python -m build` as CORRECT, so a future over-broad "fix"
+of both lines goes red. ⚠ Every assertion was watched fail first: 9 against the
+unedited file, and the remaining 2 against a reintroduced defect each
+(`python -m twine` written back into the command block; the workflow bullet
+rewritten to uvx).
+
 ### Added - the sdist ROOT ALLOWLIST, the half 1.31.12 did not have
 
 1.31.12 added a credential canary: it proves that NAMED bad paths are absent

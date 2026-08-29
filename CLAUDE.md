@@ -208,7 +208,61 @@ src/jdatamunch_mcp/
 ## Releasing
 - **Tests** (`.github/workflows/test.yml`): matrix ubuntu+windows x py3.10-3.13 on push/PR to master; pytest + sdist sensitive-path check.
 - **Release** (`.github/workflows/release.yml`, added v1.16.0): on every push to master, *after Tests passes*, auto-tags + creates a GitHub release when `pyproject.toml`'s version has no release yet. **Builds the wheel + sdist (`python -m build`) and attaches both to the release** — the console one-click installer reads the latest release's `.whl`, so a release MUST carry it. No-op for docs-only / non-bump pushes. Gated via `workflow_run` + `conclusion == 'success'` so a red commit never gets tagged. **Don't hand-tag on a version bump** — the workflow does it (hand-creating a release first just makes the workflow no-op, which is fine). (Asset-attaching added 2026-06-28 after v1.15.0/v1.16.0 shipped bare and broke the console installer; v1.16.0's wheel was backfilled by hand.)
-- **PyPI is still manual**: `python -m build` + `twine upload dist/*` from a machine with `.pypirc`. CI has no PyPI credential. To automate, add a publish job using PyPI Trusted Publishing (OIDC, no stored secret) once the publisher is configured on pypi.org.
+- **Read the Tests run for the pushed SHA BEFORE the manual upload.** The GitHub
+  release is gated (`workflow_run` + `conclusion == 'success'`), so a red commit
+  never gets tagged — **but PyPI is manual and a human can still upload against a
+  red build**, and a PyPI upload cannot be taken back. Four consecutive jcm
+  releases (.259–.262) were published, tagged and uploaded red because nobody
+  read the check; the very next release caught a real failure on all 8 matrix
+  jobs with nothing shipped.
+  ```bash
+  GITHUB_TOKEN="" gh run list --repo jgravelle/jdatamunch-mcp --limit 3 \
+    --json headSha,conclusion,status,name
+  ```
+- **PyPI is still manual**, and it runs through `uvx`, not through this box's
+  interpreters. CI has no PyPI credential. To automate, add a publish job using
+  PyPI Trusted Publishing (OIDC, no stored secret) once the publisher is
+  configured on pypi.org.
+  ```bash
+  uvx --from build pyproject-build
+  uvx --from twine twine check  dist/*X.Y.Z*   # gate: fails BEFORE anything ships
+  uvx --from twine twine upload dist/*X.Y.Z*
+  ```
+  ⚠⚠ **Neither `python -m build` nor the global `twine` works here, and the
+  failure is not hypothetical — it stopped jdoc 1.132.0 mid-release
+  (2026-08-12), and that release's notes named this repo as the next victim.**
+  `build` is not in the project venv (`uv run python -m build` → *No module named
+  build*), and the global twine validates metadata with the global `packaging`,
+  which tops out below the `Metadata-Version` an always-latest hatchling emits
+  (`InvalidDistribution: '2.5' is not a valid metadata version`).
+  ⚠⚠ **`pip install -U packaging` is the WRONG fix.** That interpreter is a
+  kitchen sink and installed packages pin `packaging<25` — upgrading breaks
+  working packages to satisfy a release tool. `uvx` resolves twine and its
+  `packaging` in a throwaway env, leaves the global alone, and cannot rot when
+  the next metadata version arrives.
+  ⚠ **`twine check` is the load-bearing line, not the upload.** Without it the
+  metadata failure is discovered *during* upload — possibly after the wheel is on
+  PyPI and the sdist is not, which is a half-published version that cannot be
+  re-uploaded.
+  ⚠ The `python -m build` in the release.yml bullet above is **correct and must
+  stay**: CI installs `build` and `twine` fresh in a clean runner, where none of
+  this applies. The defect was only ever in the instruction aimed at a human on
+  this box. `tests/test_release_tooling_binding.py` pins both directions.
+- **MCP registry** (published since 2026-08-06, nine-plus versions). When you
+  read back a publish:
+  ⚠⚠ **Each row is `{server: {...}, _meta: {...}}` (schema 2025-12-11).** `name`,
+  `version` and `packages[]` live under **`server`**; `isLatest` and
+  `publishedAt` live under
+  `_meta["io.modelcontextprotocol.registry/official"]`. **A flat `row["name"]`
+  read returns ZERO rows on a publish that completely succeeded** — measured on a
+  confirmed-good publish where the flat parse found 0 of 45 rows.
+  ⚠⚠ This is a SECOND false negative on top of the known paging trap, and unlike
+  that one it **survives `&limit=100`**, so the documented remedy does not help
+  and the symptom is indistinguishable from a failed publish. **Never re-publish
+  on a zero-row read — fix the parse.** Confirm `server.packages[].version`
+  advanced, not only `server.version`; an entry can move one and not the other.
+  ⚠ Read-after-write lag is real: a good publish read back as absent ~90 seconds
+  later and appeared on the next poll. **Absence is not evidence of failure.**
 
 ## Standing lessons (suite-wide)
 
