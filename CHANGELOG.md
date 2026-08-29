@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+### Added - the sdist ROOT ALLOWLIST, the half 1.31.12 did not have
+
+1.31.12 added a credential canary: it proves that NAMED bad paths are absent
+from the sdist. ⚠⚠ **A scratch file has no name to plant a canary under**, which
+is how jcodemunch-mcp 1.108.305 shipped `relnotes.md` -- a copy of its release
+notes, swept up by a `git add -A` in the release commit -- inside a published
+sdist. The allowlist that fixed it there found a second instance (`suite.log`)
+minutes later. **An allowlist catches the class; a denylist catches the
+instance.**
+
+`tests/test_sdist_exclusions.py` builds a real sdist and asserts every root file
+is on a written-down list, in BOTH directions: an entry naming a file that no
+longer ships makes the list stop describing the artifact, and that reverse
+assertion is what catches a wholesale copy of a sibling repo's list. Plus a
+per-member size budget -- jdocmunch-mcp shipped a 5.9 MB image in `tests/` as
+87% of its own source distribution until its 1.123.2, as a TRACKED file that
+exclusion rules and untracked-file scans were both blind to.
+
+⚠ Found by porting from jdocmunch-mcp 1.138.0, where the same gap existed. All
+three servers carried the same `.claude/`-only exclude and only jcm had the
+guard: **a setting fixed in one repo of a suite is fixed in one repo.** Both
+halves proven by putting each defect back.
+
+
 ## [1.31.12] - 2026-08-24 - The sdist credential guard
 
 ### Added - the sdist credential guard, ported by intent from jcodemunch-mcp
