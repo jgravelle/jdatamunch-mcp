@@ -1,0 +1,81 @@
+{
+  "estimator": "bytes/4",
+  "weigher": "jdatamunch_mcp.server._schema_weight",
+  "surface_builder": "jdatamunch_mcp.server._filter_tools",
+  "always_present_tools": [
+    "jdatamunch_guide"
+  ],
+  "schema_tokens_basis": "one_time_at_full_rate_then_cache_read",
+  "schema_tokens_basis_note": "The tool-schema block is stable across requests, so it is paid at full rate approximately once per cache lifetime and at cache-read rates (~0.1x) thereafter. This count is payload size, NOT a per-request saving; reading it as one overstates the cost impact by roughly an order of magnitude. Measured: jcodemunch-mcp benchmarks/codex_surface/ (86% of baseline input cached).",
+  "tiers": [
+    {
+      "profile": "core",
+      "visible_tools": 11,
+      "catalog_tools": 39,
+      "tools_dropped": 28,
+      "schema_tokens_visible": 3032,
+      "schema_tokens_catalog": 8878,
+      "schema_tokens_avoided": 5846,
+      "dropped_tool_names": [
+        "analyze_perf",
+        "check_column_drop_safe",
+        "check_embedding_drift",
+        "data_health_radar",
+        "delete_dataset",
+        "diff_data_health_radar",
+        "embed_dataset",
+        "finalize_handoff",
+        "find_similar_columns",
+        "find_unused_columns",
+        "get_correlations",
+        "get_data_hotspots",
+        "get_dataset_health",
+        "get_dataset_history",
+        "get_distribution",
+        "get_redaction_log",
+        "get_schema_drift",
+        "get_schema_impact",
+        "get_session_stats",
+        "ingest_sql_log",
+        "join_datasets",
+        "plan_query",
+        "run_sql",
+        "suggest_joins",
+        "suggest_keys",
+        "summarize_dataset",
+        "tune_weights",
+        "validate_index"
+      ],
+      "payload_share_of_full_pct": 34.2,
+      "payload_avoided_vs_full_pct": 65.8
+    },
+    {
+      "profile": "standard",
+      "visible_tools": 36,
+      "catalog_tools": 39,
+      "tools_dropped": 3,
+      "schema_tokens_visible": 8380,
+      "schema_tokens_catalog": 8878,
+      "schema_tokens_avoided": 498,
+      "dropped_tool_names": [
+        "get_redaction_log",
+        "get_session_stats",
+        "ingest_sql_log"
+      ],
+      "payload_share_of_full_pct": 94.4,
+      "payload_avoided_vs_full_pct": 5.6
+    },
+    {
+      "profile": "full",
+      "visible_tools": 39,
+      "catalog_tools": 39,
+      "tools_dropped": 0,
+      "schema_tokens_visible": 8878,
+      "schema_tokens_catalog": 8878,
+      "schema_tokens_avoided": 0,
+      "dropped_tool_names": [],
+      "payload_share_of_full_pct": 100.0,
+      "payload_avoided_vs_full_pct": 0.0
+    }
+  ]
+}

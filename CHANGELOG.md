@@ -2,6 +2,74 @@
 
 ## [Unreleased]
 
+### Fixed - `schema_tokens_avoided` was published with no time basis
+
+`get_session_stats` -> `tool_surface` reports `schema_tokens_visible`,
+`schema_tokens_catalog` and `schema_tokens_avoided`. A bare token count carries
+no time basis, and a reader supplies the wrong one: **per request**.
+
+That reading is wrong, and jcodemunch measured how wrong. The tool-schema block
+is stable across requests, so it is paid at full rate roughly **once** per cache
+lifetime and at cache-read rates thereafter. Its `benchmarks/codex_surface/`
+measured **86% of baseline input cached** (1,938,176 of 2,247,575 tokens), and
+says in its own words that any framing of "N tokens in every request" is wrong
+-- *and that the repository said exactly that before measuring*. So the number
+overstated the dollar impact by roughly an order of magnitude, in the direction
+that flatters us.
+
+Every count now ships beside `schema_tokens_basis` and
+`schema_tokens_basis_note`.
+
+⚠ **The arithmetic is unchanged, deliberately.** The count answers a real
+question -- how much payload the tool surface carries -- and a silently
+discounted one answers neither that nor the cost question. The fix is a label.
+
+⚠⚠ The two constants live in one new module, `schema_token_basis.py`, and are
+imported. A second copy that agrees today is exactly what makes a later
+divergence invisible; a test fails if the literal appears in a second module.
+
+⚠ **jdocmunch-mcp still shipped this field unbased as of 2026-08-30.** Named
+here, not fixed from here.
+
+### Added - the tool tiers are measured, and `standard` is barely a lever
+
+`JDATAMUNCH_TOOL_PROFILE` has offered three tiers since v1.23.0 and **nobody had
+ever measured what any of them moves.** New regenerable harness
+`benchmarks/harness/run_tier_surface.py` + committed artifact
+`benchmarks/tier_surface.json`:
+
+| Tier | Tools sent | Schema tokens | % of `full` |
+|------|-----------:|--------------:|------------:|
+| `core` | 11 | 3,032 | 34.2% |
+| `standard` | 36 | 8,380 | 94.4% |
+| `full` | 39 | 8,878 | 100% |
+
+⚠ **`standard` drops three tools and 5.6% of the payload.** Offered as a token
+lever it moves almost nothing, and the config surface implied otherwise. It is
+kept -- it is a coherent capability bundle, dropping the runtime-ingest and
+forensic tools -- but the tier table in `server.py` now says plainly that it is
+not a way to save tokens. **A setting that implies a saving it does not deliver
+is the same defect class as an unstated basis**, so it is documented rather than
+quietly deleted. `core` is the tier that moves the number.
+
+⚠⚠ The harness weighs what a client **actually receives**, via
+`server._filter_tools`, not the raw catalog filtered by the tier bundle. Those
+differ by the force-included `_ALWAYS_PRESENT_TOOLS`; jcodemunch's first attempt
+did the latter and was wrong by three tools in every tier. It imports
+`server._schema_weight` rather than reimplementing it, and a test asserts the
+harness and the shipped receipt agree tier by tier.
+
+### Added - a ratchet on the defect this server does not have
+
+jcodemunch v1.108.311 refuses a mid-session tool-tier switch that cannot repay
+the prompt cache it invalidates. **That machinery is deliberately NOT ported**:
+this server resolves `JDATAMUNCH_TOOL_PROFILE` at startup and never re-publishes
+its tool list, so there is no invalidation to price. That is a property of the
+tree, not a law. `tests/test_schema_token_basis.py` fails if
+`send_tool_list_changed` or `notifications/tools/list_changed` appears in `src/`
+without a switch-cost helper beside it -- verified in both directions against a
+temporarily reintroduced call.
+
 ### Fixed - the release instructions in our own brief named a command that cannot run here
 
 `CLAUDE.md`'s `## Releasing` section told a maintainer to publish with

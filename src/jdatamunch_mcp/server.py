@@ -189,6 +189,27 @@ _TOOL_TIER_STANDARD: frozenset[str] = _TOOL_TIER_CORE | frozenset({
     "finalize_handoff",
 })
 
+# ⚠⚠ MEASURED 2026-08-31, and one of these tiers is barely a lever.
+# `benchmarks/harness/run_tier_surface.py` weighs what a client actually
+# receives under each profile (regenerate with `--json-out
+# benchmarks/tier_surface.json`; never hand-type these):
+#
+#   core      11 tools   3,032 schema tokens   34.2% of full   (65.8% avoided)
+#   standard  36 tools   8,380 schema tokens   94.4% of full   ( 5.6% avoided)
+#   full      39 tools   8,878 schema tokens
+#
+# ⚠ `standard` drops THREE tools — get_redaction_log, get_session_stats,
+# ingest_sql_log — and 5.6% of the payload. Offered as a token lever it moves
+# almost nothing, and the config surface implies otherwise; a setting that
+# implies a saving it does not deliver is the same defect class as a token
+# count published with no time basis. It is kept because it is a coherent
+# capability bundle (drops the runtime-ingest and forensic tools), NOT because
+# it is worth setting to save tokens. `core` is the tier that moves the number.
+#
+# ⚠ These are payload sizes, not per-request savings — see
+# `schema_token_basis.py`. The profile is read at STARTUP only; there is no
+# runtime switch, which is why this server needs none of jcm 1.108.311's
+# switch-cost machinery (ratcheted in tests/test_schema_token_basis.py).
 _PROFILE_TIERS: dict[str, frozenset[str] | None] = {
     "core": _TOOL_TIER_CORE,
     "standard": _TOOL_TIER_STANDARD,
@@ -224,6 +245,29 @@ def _filter_tools(tools: list[Tool]) -> list[Tool]:
     return tools
 
 
+def _schema_weight(tool: Tool) -> int:
+    """Schema token weight of ONE tool, at the meter's bytes/4 scale over the
+    {name, description, inputSchema} serialization.
+
+    ⚠⚠ Module-level and singular on purpose. `benchmarks/harness/run_tier_surface.py`
+    imports THIS function rather than reimplementing it: two weighers that agree
+    today are what make a later divergence invisible, and a benchmark would then
+    price a surface the server does not publish.
+    """
+    import json as _json
+
+    payload = _json.dumps(
+        {
+            "name": tool.name,
+            "description": tool.description or "",
+            "inputSchema": tool.inputSchema or {},
+        },
+        separators=(",", ":"),
+        default=str,
+    )
+    return max(1, len(payload.encode("utf-8")) // 4)
+
+
 def _tool_surface_stats(top_n: int = 15) -> dict:
     """Schema token weight of the visible tool surface vs the full catalog.
 
@@ -232,24 +276,17 @@ def _tool_surface_stats(top_n: int = 15) -> dict:
     inputSchema} serialization. Advisory receipt only — never blocks, nothing
     persisted. jData has no Counter surface, so the block carries `profile`
     but no `surface` key.
-    """
-    import json as _json
 
-    def _weight(tool: Tool) -> int:
-        payload = _json.dumps(
-            {
-                "name": tool.name,
-                "description": tool.description or "",
-                "inputSchema": tool.inputSchema or {},
-            },
-            separators=(",", ":"),
-            default=str,
-        )
-        return max(1, len(payload.encode("utf-8")) // 4)
+    ⚠⚠ Every token figure here carries `schema_tokens_basis`. A bare
+    "tokens avoided" count has no time basis and a reader supplies the wrong
+    one — PER REQUEST — which the measurement in `schema_token_basis` forbids.
+    The counts are payload size; they are not per-request savings.
+    """
+    from .schema_token_basis import SCHEMA_TOKENS_BASIS, SCHEMA_TOKENS_BASIS_NOTE
 
     catalog_tools = _all_tools()
-    visible = {t.name: _weight(t) for t in _filter_tools(catalog_tools)}
-    catalog = {t.name: _weight(t) for t in catalog_tools}
+    visible = {t.name: _schema_weight(t) for t in _filter_tools(catalog_tools)}
+    catalog = {t.name: _schema_weight(t) for t in catalog_tools}
     visible_total = sum(visible.values())
     catalog_total = sum(catalog.values())
     heaviest = dict(sorted(visible.items(), key=lambda kv: -kv[1])[:top_n])
@@ -260,6 +297,8 @@ def _tool_surface_stats(top_n: int = 15) -> dict:
         "schema_tokens_visible": visible_total,
         "schema_tokens_catalog": catalog_total,
         "schema_tokens_avoided": max(0, catalog_total - visible_total),
+        "schema_tokens_basis": SCHEMA_TOKENS_BASIS,
+        "schema_tokens_basis_note": SCHEMA_TOKENS_BASIS_NOTE,
         "heaviest_tools": heaviest,
         "estimator": "bytes/4",
     }

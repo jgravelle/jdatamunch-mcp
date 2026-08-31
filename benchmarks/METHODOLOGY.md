@@ -135,3 +135,64 @@ schema profile (~3,800 tokens regardless of row count) by computing statistics
 once during indexing. The ratio scales with row count — a 10-row CSV would
 show a modest improvement; a 1M-row CSV shows a 25,000x improvement because
 the schema profile stays nearly the same size.
+
+---
+
+# Tool-Surface Benchmark (`run_tier_surface.py`)
+
+A second, unrelated measurement lives in this directory. It does not measure
+retrieval efficiency; it measures how many schema tokens each
+`JDATAMUNCH_TOOL_PROFILE` tier sends to the client.
+
+```bash
+python benchmarks/harness/run_tier_surface.py --json-out benchmarks/tier_surface.json
+```
+
+## Estimator
+
+**bytes/4** over the compact `{name, description, inputSchema}` JSON of each
+tool — the same scale the shipped `get_session_stats` -> `tool_surface` receipt
+uses. It is an ESTIMATE, not a tokenizer count. `run_benchmark.py` uses real
+`cl100k_base` counts because it compares against a raw file; here the quantity
+of interest is the ratio between tiers, which the estimator preserves.
+
+## What is weighed
+
+⚠⚠ What a client **actually receives**, obtained by calling
+`server._filter_tools` — the same function `list_tools` calls — not the raw
+catalog filtered by the tier bundle. Those differ: `_ALWAYS_PRESENT_TOOLS` is
+force-included in every tier and `JDATAMUNCH_DISABLED_TOOLS` subtracts from it.
+jcodemunch's first attempt at this measurement filtered by hand and was wrong by
+three tools in every tier.
+
+The per-tool weigher is imported from `server._schema_weight` rather than
+reimplemented. `tests/test_schema_token_basis.py` fails if a second weigher
+appears, and separately asserts that this harness and the shipped receipt agree
+tier by tier.
+
+## Result (2026-08-31)
+
+| Tier | Tools sent | Schema tokens | % of `full` | Payload avoided |
+|------|-----------:|--------------:|------------:|----------------:|
+| `core` | 11 | 3,032 | 34.2% | 65.8% |
+| `standard` | 36 | 8,380 | 94.4% | 5.6% |
+| `full` | 39 | 8,878 | 100% | — |
+
+Regenerate rather than quote; the committed artifact is
+[`tier_surface.json`](tier_surface.json).
+
+⚠ **`standard` is barely a lever.** It drops three tools
+(`get_redaction_log`, `get_session_stats`, `ingest_sql_log`) and 5.6% of the
+payload. It is a coherent capability bundle, but it is not a way to save
+tokens, and the config surface implied it was. `core` is the tier that moves
+the number.
+
+## Time basis
+
+⚠⚠ These are **payload sizes, not per-request savings.** The tool-schema block
+is stable across requests, so it is paid at full rate roughly once per cache
+lifetime and at cache-read rates thereafter — jcodemunch's
+`benchmarks/codex_surface/` measured 86% of baseline input cached. Reading any
+figure above as "tokens saved on every request" overstates the cost impact by
+roughly an order of magnitude. The basis ships on the wire beside every count;
+see `src/jdatamunch_mcp/schema_token_basis.py`.
