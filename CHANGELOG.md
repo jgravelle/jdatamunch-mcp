@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.31.13] - 2026-08-31
 
 ### Fixed - `schema_tokens_avoided` was published with no time basis
 
