@@ -1,5 +1,51 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed - the Sonnet rate was written for a date that never arrived
+
+`storage/token_tracker.PRICING` carried `claude_sonnet` at **$3.00 / 1M input
+tokens**. Sonnet 5 is **$2.00**. It launched at $2 as introductory pricing with
+an increase to $3 scheduled for **2026-09-01**, and Anthropic cancelled that
+increase before it applied; $3 is the superseded Sonnet 4.6's rate. The rate is
+now 2.00, verified against the Base Input Tokens column of
+<https://platform.claude.com/docs/en/about-claude/pricing>, which carries the
+note that the scheduled increase "will not occur".
+
+The value is emitted in the `cost_avoided` / `total_cost_avoided` blocks on
+`describe_dataset`, `describe_column`, `get_rows`, `sample_rows`, `aggregate`,
+`join_datasets`, `get_data_hotspots` and `get_session_stats`, so every one of
+those responses overstated the Sonnet figure by 50%.
+
+⚠⚠ **A constant written for a FUTURE date is wrong for the whole interval
+before it, and reads identically to a stale one.** The table's header said "As
+of 2026-06-24", which makes a value look checked. It was wrong on that date too.
+
+⚠ **The key name is unchanged.** `claude_sonnet` is emitted verbatim on the
+wire, so renaming it would break anything parsing those blocks. The model
+identity moved into the comment instead, and each line now names exactly one
+model -- a key that names a family inherits whichever member's price someone
+last looked at, which is the whole defect in one sentence.
+
+### Added - a value pin on `PRICING`
+
+This repo had **no test referencing `PRICING` at all**, not even a key-presence
+check. Nothing here would have noticed any of the four rates changing, in either
+direction. `tests/test_pricing.py` (7) restates the rates as literals sourced
+from the pricing page and asserts the table matches, plus a `cost_avoided()`
+round trip. ⚠ The restatement is the point: a pin that imports the value it
+checks asserts nothing. Verified by putting 3.00 back -- 3 tests go red.
+
+⚠ `claude_opus` ($5.00) and `claude_haiku` ($1.00) were **already correct** and
+are untouched; both were re-checked against the same page.
+
+⚠ **`gpt5_latest` is untouched and unverified.** It is not an Anthropic model
+and no source was consulted for it. The pin fixes its current value so it cannot
+drift unnoticed; that is not a claim that $10.00 is right.
+
+Suite 888 -> **895 passed / 2 skipped** under CI's `uv run pytest tests/`; skip
+count unchanged.
+
 ## [1.31.13] - 2026-08-31
 
 ### Fixed - `schema_tokens_avoided` was published with no time basis
