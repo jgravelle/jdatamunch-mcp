@@ -1,54 +1,153 @@
 # jdatamunch-mcp — Project Brief
 
-## Current State
-- **Version:** 1.31.13 — **a token count published with no time basis, and a tier nobody had measured.** ⚠⚠ `tool_surface.schema_tokens_avoided` was a bare number, and a reader supplies the wrong basis: PER REQUEST. **The tool-schema block is stable, so it is paid at full rate roughly ONCE per cache lifetime and at cache-read rates thereafter** — jcm's `benchmarks/codex_surface/` measured **86% of baseline input cached (1,938,176 of 2,247,575)** and says in its own words that the "N tokens in every request" framing is wrong *and that the repo said exactly that before measuring*. The field overstated the dollar impact by roughly an order of magnitude, **in the direction that flatters us.** New `schema_token_basis.py` holds `SCHEMA_TOKENS_BASIS` + `_NOTE`, emitted beside every count. ⚠ **The arithmetic is UNCHANGED and that is deliberate** — the raw count answers a payload question, a silently discounted one answers neither that nor the cost question; the fix is a LABEL. ⚠⚠ Constants live in ONE module and are imported; a test fails if the literal appears in a second. ⚠ **jdoc still ships the field unbased** (as of 2026-08-30) — named, not fixed from here. ⚠⚠ **The tiers are now MEASURED** (`benchmarks/harness/run_tier_surface.py` + committed `tier_surface.json`, regenerable, never hand-typed): `core` 11 tools / 3,032 tokens / **65.8% avoided**; `standard` 36 / 8,380 / **5.6% avoided**; `full` 39 / 8,878. **`standard` drops THREE tools and 5.6% of the payload — offered as a token lever it is close to no lever at all**, and the config surface implied otherwise; kept as a coherent capability bundle, documented as not a token saving rather than quietly deleted, because **a setting that implies a saving it does not deliver is the same defect class as an unstated basis.** ⚠⚠ The harness weighs what a client **actually receives** via `_filter_tools`, not the catalog filtered by the tier bundle — those differ by force-included `_ALWAYS_PRESENT_TOOLS`, and jcm's first attempt was **wrong by three tools in every tier**; it imports `server._schema_weight` (lifted to module level, exactly one weigher, AST-asserted) instead of writing a second. ⚠⚠ **jcm's OTHER 2026-08-30 release, 1.108.311, is deliberately NOT ported**: it prices a mid-session tier switch against the prompt cache it invalidates, and this server reads the profile at STARTUP only — porting it would be machinery for a mechanism we do not have. A ratchet keeps that absence true: `send_tool_list_changed` / `notifications/tools/list_changed` in `src/` without a switch-cost helper fails the suite, **verified in both directions against a temporarily reintroduced call.** Suite 870→**879 passed / 11 skipped** (+9, skip count unchanged); 3.13 CI **884 passed / 6 skipped** — **890 COLLECTED in both, which is the number that proves no module went missing**; ruff clean. `tests/test_schema_token_basis.py` (9); four of them were seen RED first. ⚠ This release also carries the two commits that sat unreleased behind 1.31.12 (the uvx publish docs + the sdist root allowlist), both docs/tests only — **1.31.12 on PyPI was a faithful build of its own source; it stopped being one the moment `schema_token_basis.py` merged**, which is why this was cut rather than batched.
-- **Version:** 1.31.12 — **the sdist credential guard, ported BY INTENT from jcm.** `tests/test_build.py` (8). This repo had the `pyproject.toml` `.claude/` exclude with NO TEST behind it. ⚠⚠ **Copying jcm's file verbatim would have failed on the first run**: it asserts `.claude/` is in the repo `.gitignore`, and here that is FALSE — the file is ignored via the developer's GLOBAL gitignore, so `git status` never shows it, a fresh clone never has it, and **a CI guard grepping the checked-out tree cannot fire.** The exclude is the ONLY defence, so the guard builds a REAL sdist (`uv build`, 1.3 s — neither `build` nor `hatchling` is in this venv) and scans it. ⚠ The canary must EXIST in the working tree or the test is vacuous; asserted, and skipped VISIBLY otherwise. ⚠⚠ **Two defects in the guard itself, both found by running it against the REINTRODUCED leak**: a substring check on `.claude` flagged `.claude-plugin/plugin.json` (a shipped manifest — **a guard with false positives is one nobody believes**), and the config test PASSED with `exclude` emptied because `.claude/` appears in the COMMENT above it — **a text-scanning ratchet a comment satisfies reads as coverage while asserting nothing.** It parses TOML now; 3 tests go red with the exclude removed. ⚠ Scans CONTENT too, exempting `AKIAIOSFODNN7EXAMPLE` BY VALUE (AWS's doc placeholder, a required `test_redact.py` fixture). [[a-ratchet-can-pass-against-the-defect-it-names]]
-- **Version:** 1.31.11 — **two guards in the absence-verdict path, one tripped by our OWN write.** ⚠⚠ **`index_changed_since_load` was sampled AFTER the scan, and `_semantic_scores` lazily embeds missing columns and PERSISTS them into the same `data.sqlite` the probe stats** — so the FIRST semantic search of every dataset reported the dataset as rewritten underneath itself. **Measured, same query/same data/zero rows: first search `degraded` ("absence is NOT proven"), second `absent` ("strong evidence no such column is present"); `index_changed` was the ONLY differing input and `semantic_available` was True in both.** The wrong one fires on every dataset's first search and withdraws the absence claim this product exists to make. **Sample the probe BEFORE any channel runs** — an mtime is a PROXY for "someone else rewrote rows" and our own write is a known false positive, so excluding it repairs the proxy rather than relaxing the guard; `_meta.rewrite_probe` discloses that a rebuild STARTING mid-scan is no longer visible. ⚠ A pure `get_all()` does NOT move the mtime despite `_connect()` running PRAGMA + `executescript` (measured, delta 0) — only the write does, and the first reading overstated it. ⚠⚠ **(2) `_NOTES` was keyed on STATE while TWO conditions produce `degraded`**, so an index-rewritten degrade was served the semantic-channel text and told the caller to configure a provider that was configured and working — **it asserted a different cause and prescribed a fix for a problem the caller did not have.** `_note_for` keys on the cause; an unrecognised cause falls back to the state note, so a future third cause is unspecific rather than wrong. ⚠ Found by sweeping this repo for the four classes jcm hit in its 1.108.296 — **a defect fixed in one repo of a suite is fixed in one repo.** [[a-guard-sampled-after-the-work-is-tripped-by-the-work]]
-- **Version:** 1.31.10 — **a skipped module hid how many tests it held.** Test-only. `tests/test_excel_parser.py` reported as **one** `1 skipped` line while holding **29 tests, 19 of which pass on an ordinary dev box** and had never run; the summary read `817 passed, 2 skipped` either way. ⚠⚠ **`pytest.importorskip` at MODULE scope RAISES during import**, so a whole file collapses to one line however many tests are in it. Three sites. ⚠ The construct was inert on its own terms too — `not pytest.importorskip("xlrd") or False`: importorskip returns the MODULE, so the `skipif` NEVER FIRED and every skip came from the import side effect, the part that hides the count. Now `importlib.util.find_spec`. ⚠⚠ **Found by comparing TOTALS across interpreters, never passed counts**: 819 local vs 839 on 3.13; they agree at 841 now. ⚠ `tests/test_optional_dep_skips_are_visible.py` bans the pattern and separately asserts both modules yield real items. ⚠ jcm carried TEN of the same guards in front of **209 tests** (fixed in its 1.108.293) — **a setting fixed in one repo of a suite is fixed in one repo.**
-- **Version:** 1.31.9 — **the one string that survives tool deferral.** The MCP `initialize` response now carries an `instructions` string; it did not before, because the transport called `create_initialization_options()` bare and the field went out empty. ⚠⚠ **Invisible in a normal session, CONCENTRATED in a deferred one**: a host over its schema budget ships tool NAMES and withholds the JSONSchemas, so an agent sees 39 bare strings and none of the descriptions. The spec delivers `instructions` on a SEPARATE TRACK from the tool list, so it arrives whole - in a plain MCP client it is the entire steering budget this server gets. 897 chars against a 1,000 cap. ⚠ Also sets `Server(..., version=__version__)`: without it the SDK reports ITS OWN version in `serverInfo`. ⚠ `__version__` is `"unknown"` under `PYTHONPATH=src`, so a green test does NOT prove the wire carries a real number. ⚠⚠ **Ported from jcodemunch-mcp v1.108.292 - both defects were present here unchanged, and neither had a symptom anyone could report.** ⚠⚠ **The port also reproduced a NameError in BOTH repos** (`logger` through a module-level name neither server.py defines) and **only jdoc caught it** - jdata's suite was GREEN with the identical bug, because it had no F821 gate. The gate is ported here as `tests/test_undefined_names.py`. **A setting fixed in one repo of a suite is fixed in one repo, and that applies to the GATES as much as the code.** `tests/test_mcp_instructions.py` binds the prose to the catalog; all three guards were verified by reintroducing the defect each names.
-- **Version:** 1.31.8 — **the licence became something you can point at.** PyPI published NEITHER `info.license` NOR `info.license_expression` for this package, so an organisation with a commercial licence had **nothing to allowlist — not a wrong identifier, no identifier.** PEP 639 now: `LicenseRef-jDataMunch-Dual-Use` + `license-files`. Reported and fixed by @marcelruhf (jdata #4), a PLATFORM CUSTOMER. ⚠⚠ **He named ONE surface and the licence was declared on THREE** — plugin.json and the mcpb manifest both said `LicenseRef-Dual-Use`, no product prefix, so an allowlist still needed two entries. He ported jcm #518's ratchet here HIMSELF, unasked, and **his version of the version-suffix check is better than ours**: a `Version` line and a suffix imply each other BOTH WAYS, where ours assumed a suffix exists. This LICENSE states no version, which is exactly where ours would have been wrong. Adopted back into jcm as #520. ⚠⚠ **His PR had HELD CI and read as tested** — only `license/cla` was reported, while two runs sat `action_required` and never executed. `fork-pr-contributor-approval` was `first_time_contributors`; relaxed to match jcm, which fixed it 2026-08-13. **A setting fixed in one repo of a suite is fixed in one repo.** ⚠ `He's kinda full of himself.` removed from LICENSE condition 2 — it stays in jcm's README. EDITORIAL: it grants and removes nothing, so the identifier is untouched and no allowlist is churned. ⚠ PyPI metadata is IMMUTABLE per version: 1.31.7 and earlier keep EMPTY licence fields permanently. ⚠ Suite **807 passed / 1 skipped** local; 3.13 CI-env **827 passed / 1 skipped, 828 collected**. ⚠ **The 21-test gap is ENTIRELY `test_excel_parser.py`, proven by an ignore-diff rather than assumed**: 828 collected on 3.13, 807 with that file ignored, and 807 is the local total exactly. The Excel reader dependency is absent locally so the module is not collected AT ALL — invisible from `N passed` and from the skip count, visible only in the TOTAL.
-- **Version:** 1.31.7 — **eleven tools graded something without saying what they did NOT grade.** Suite-wide pass against the six-component tool-description rubric in [arXiv:2602.14878](https://arxiv.org/abs/2602.14878) (856 tools / 103 servers; **97.1% carry at least one smell**); method, both scoring frames and the dated numbers live in jcm `benchmarks/description_smells/`. jdata was flagged on 20 tools for Unstated Limitation, **11 of them real gaps** and the rest phrasing the scanner failed to match. ⚠⚠ **The health and suggestion tools were the worst of it, in the way that matters most for a DATA server**: they graded something and never said what they were not grading. `get_dataset_health` grades structure and completeness, **not whether the values are right**; `validate_index` checks the integrity of the INDEX, never the correctness of the underlying data; `suggest_keys` ranks from PROFILE STATISTICS and says to confirm against the source system before treating a candidate as the key. ⚠ **A confidence score on a key candidate reads as authority unless the description says where the number came from.** `list_datasets` was one sentence and is now three. ⚠ Every clause is derived from the tool's own guard clauses or schema defaults (`get_rows`'s `limit` default, `get_distribution`'s 20 bins), not written to satisfy the rubric. ⚠⚠ **Report BOTH scoring frames or neither** — the paper's scanner is fed name + description text only and never sees `inputSchema`, so it scores schema-documented parameters 1/5 by its own wording. Suite **802 passed / 1 skipped** local (803 total), and the release adds no tests, so it reproduces the pre-bump run exactly. ⚠⚠ **The 3.13 CI-env reproduce collects 823, TWENTY-ONE MORE, and both runs report ONE skip** — the extra module is `test_excel_parser.py`, absent locally because the Excel reader dependency is not installed in this env, so it is not collected at all rather than collected-and-skipped. **A whole module going missing is invisible from `N passed` and invisible from the skip count; only the TOTAL shows it.** 3.13: **822 passed / 1 skipped**. Compare totals across interpreters, never passed counts.
-- **Version:** 1.31.6 — **JSON-RPC owns a PRIVATE stdout.** Suite parity with jdocmunch 1.129.0 ([jdoc#110](https://github.com/jgravelle/jdocmunch-mcp/issues/110)); found by auditing the siblings after fixing it there, **not** by a report. ⚠⚠ **`redirect_stdout` never closed this** — it rebinds `sys.stdout` ONLY, so it does not cover a C extension calling `write(1, ...)`, a subprocess that inherited fd 1, or another thread. `embeddings.py:93` builds a `SentenceTransformer` **inside `embed_dataset`**, so a first embed on a machine without the model cached downloads it MID-REQUEST, straight at the framed stream. ⚠ **This is the same lazy-ST/`to_thread` family as issue #3** (MotoMato85's Windows loader-lock hang) from the other direction: #3 was WHERE the import ran, this is WHAT IT PRINTS while it runs; `warm_up_provider()` moves the import to the main thread but nothing kept its output off stdout. `stdio_guard.claim_stdout()` dups the real stdout, hands the duplicate to `stdio_server(stdout=...)`, then points fd 1 at stderr — after which fd 1 **IS** stderr process-wide. ⚠ Chatter a launcher wrote BEFORE we exec is already in the pipe and is NOT covered. ⚠ Fails OPEN under pythonw or a replaced `sys.stderr`, and says so. ⚠ `tests/test_stdio_guard.py` (8) runs REAL SUBPROCESSES — an in-process test of a file-descriptor swap tests the mock.
-- **Version:** 1.31.5 — **the lint gate actually RUNS.** .31.4 shipped a lint job that could not execute; **CI found both defects, not local runs.** (1) **`ruff` was not in the dev group** — `uv run ruff` fetches on demand LOCALLY, so the command that "worked" on my machine could never work under `uv sync --group dev` (`Failed to spawn: ruff`). (2) ⚠⚠ **`ignore`-only config means the rule set is whatever ruff shipped that week.** Reproduced in a clean env: **same config, ruff 0.16.2 → 446 findings** (YTT/ASYNC/S/BLE/B/UP/I) **where the intended set gives 10.** jcm never saw it because it TRACKS `uv.lock`, which pins ruff; this repo gitignores its lock BY DESIGN, so the gate drifted on someone else's release schedule. `[tool.ruff.lint]` now declares **`select = ["E4","E7","E9","F"]`** explicitly in **all three servers** (jcm included — exposed the moment anyone re-locks). **Widening the set is now a DECISION, not a ruff upgrade.** ⚠ .31.4's package was sound (all 8 matrix jobs green); only its lint job was broken.
-- **Version:** 1.31.4 — **a lint gate.** CI had no `ruff` job; it has one now (Linux-only, outside the matrix), added alongside jdoc. ⚠ **What it found HERE: nothing dangerous** — jdata was **already clean on F821** (undefined names, the rule that means a runtime crash). **jdoc was NOT and had SHIPPED one** inside an `except` block, which is what prompted gating both. Say that plainly rather than implying the gate rescued this repo. Fixed to make it green: 9 unused imports, 3 placeholder-less f-strings, 1 `== None` → `is None` (a plain dict `.get()`, **not** a pandas elementwise compare — checked before changing). Suite unchanged at **794 passed / 1 skipped**. Grandfathered WITH counts + reasons: `E702` (8), `F841` (2). ⚠⚠ **Did NOT copy jcm's `uv sync --locked` step** — `uv.lock` is GITIGNORED here, so `--locked` would FAIL; the job uses plain `uv sync --group dev` like this repo's own test job. **Second time in two releases that copying a sibling step verbatim would have broken something** — copy the INTENT, not the step. [[feedback_suite_parity_is_for_contracts_not_test_files]]
-- **Version:** 1.31.3 — **text-mode IO and CLI output declare their encoding.** Suite parity with jcm, which swept three directions of the cp1252 hazard; **this repo was scanned SEPARATELY** (a defect in one server implies nothing either way about its siblings). Found here: subprocess input **0** (clean since the 2026-08-03 sweep), our own output **0**, file IO **7** (savings tracker ×4, repo-SHA markers ×3). ⚠ **All 7 hold ASCII-only content today** (JSON with ASCII keys, git SHAs), so **nothing was corrupt** — unlike jcm, whose `tuning.jsonc` genuinely carried an em-dash. The exposure is a future non-ASCII value. Said plainly rather than dressed up as a bug fix. ⚠ `_force_utf8_stdio()` added at the top of `main()` even though this repo emits NO non-ASCII output: on Windows `sys.stdout` is the CONSOLE stream (UTF-8) on a terminal and the LOCALE stream (cp1252) when PIPED, so the defect arrives with the next character someone adds and arrives as a crash nobody can reproduce interactively. The tests assert the MECHANISM, not a repaired symptom, and say so. ⚠⚠ **The ported file-IO scanner needed THREE iterations**: `args[1]` for mode false-positived `path.open("rb")`; branching on Name-vs-Attribute then false-positived `wave.open(f,"rb")` (a module call is attribute-shaped but builtin-signatured); matching the mode **BY VALUE** made position stop mattering. Tested in BOTH directions — **a guard with false positives is one nobody believes, and a ratchet nobody believes collects exemptions**. ⚠ Non-vacuity floor sized to THIS tree (60+ of 81 files), not copied from jcm. ⚠⚠ **NEAR-MISS worth keeping: I almost shipped a `test_lockfile_version_sync.py` port.** `uv.lock` is **GITIGNORED here by design** (CI runs plain `uv sync`, not `--locked`), so the "stale lock" I thought I had found is a LOCAL ARTIFACT that cannot drift across releases — and the ported test would have FAILED ON A FRESH CLONE where no lock exists. **Suite parity is for BEHAVIOUR CONTRACTS, not for whatever the other repo happens to have in `tests/`.** Tests: `test_file_io_encoding_guard.py` (39) + `test_cli_output_encoding.py` (10); suite **794 passed / 1 skipped**.
-- **Version:** 1.31.2 — **a truncated response said so in a field the default config DELETES.** `enforce_budget` trims rows/columns to the token budget and records what it dropped in `_meta.truncation`; this server strips `_meta` by DEFAULT (`get_meta_fields()` -> `[]`). ⚠⚠ **Measured: 600 rows trimmed to 104, disclosure gone, response indistinguishable from a complete one.** A silently shortened answer is WORSE than a refused one because the caller cannot tell — an agent reading 104 rows as the full set draws conclusions about data it was never shown, which for a tabular retrieval server is the failure that matters most. Captured BEFORE filtering, re-attached **TOP-LEVEL** as `truncated` + `truncated_note` naming `JDATAMUNCH_MAX_RESPONSE_TOKENS`; same treatment the absence ref (1.26.0), budget block (1.21.0) and `empty`/`hint` (1.28.0) already get, for the same reason: **a token the default config deletes is a token the agent never reads.** Truncation behaviour itself UNCHANGED; omitted when nothing was trimmed. ⚠ **Found by checking whether jdoc 1.124.0's four defects had siblings here** — two did NOT (`lstrip("./")` appears nowhere in this tree; the argument contract has been present since the jcm v1.108.175 port, which is why jdoc was the server that lacked it). Tests `tests/test_truncation_disclosure.py` (10, incl. an END-TO-END run on a real indexed CSV under the DEFAULT config + an omit-when-empty control); suite 745 passed / 1 skipped.
-- **Prior: 1.31.0** — **offloadable-work annotation, OFF BY DEFAULT.** `JMUNCH_OFFLOADABLE=1` (suite) or `JDATAMUNCH_OFFLOADABLE=1` (this server; narrower scope WINS) makes `describe_column` carry an advisory `_meta.offloadable` block. ⚠⚠ **We LABEL. We never route, execute, or hold model credentials** — no process, no network, no new tool, no model of ours runs. Routers classify the PROMPT because that is all they can see; this classifies THE EVIDENCE JUST ASSEMBLED. Tri-state + reason-coded, FAILS CLOSED. ⚠⚠ **A DEFAULT call is REFUSED and that is CORRECT, not a gap** — jData does not assert index freshness it cannot back, so the cheap reading answers `unknown` and the criterion refuses; pass `verify_source=True` (re-hashes the source, the only thing that establishes currency) and a clean profile is labelled `offloadable`. `verify_with` points at exactly that call. **The annotation is only ever as strong as the evidence behind it, and here you can SEE the difference the evidence makes.** ⚠ A column's "body" is its PROFILE, keyed on `type` (the field every profile carries) — keying on `sample_values` would read a legitimately empty or fully-redacted column as a missing body; the dataset is its container, passed as a VIEW so the served `result` never grows a field. ⚠ **Suite contract**: identical in jcm/jdoc — *units*/*containers* vocabulary, pinned `CONTRACT_DIGEST` + generated contract test fails the build in any of the three that drifts. ⚠ **This copy is GENERATED from jcodemunch's module** — never hand-edit; edit jcm and re-run the maintainer sync. Additive `_meta` key, emitted only when gated on; no tool-count/schema/INDEX_VERSION change. Tests `tests/test_offload_contract.py` (23).
-- **Prior: 1.30.0** — **`describe_column` discloses whether its source still matches the index.** A column profile is a claim about data ON DISK, and the tool returned one with no indication that the file had changed or been DELETED since indexing. Now emits `_meta.freshness` + `_meta.verdict`. ⚠⚠ **`fresh` is reachable ONLY via the new opt-in `verify_source=True`, and that is the DESIGN, not a limitation** — the standing product call (2026-07-24) is that a permanent `index: "fresh"` asserts currency this product cannot back, so the index channel stays a POSITIVE DETECTION. The cheap default proves `stale`/`missing_source` with a `stat` and otherwise says `unknown`, emitting **no index channel at all** when it has proven nothing; `verify_source=True` re-hashes the file, the only thing that actually establishes currency, opt-in because a source can be hundreds of MB and this runs on ordinary reads. ⚠ **A matching size does NOT prove matching content** — the `unknown` reading says so in its own `reason`, and an in-place edit preserving the byte count is invisible to `stat` and caught by the hash (there is a test for exactly that; it is why the two readings exist separately). New `DataStore.source_freshness` / `verify_source`; a test pins that `source_freshness` can NEVER return `fresh`, so a later caller cannot get that answer cheaply. Additive `_meta` keys + one defaulted kwarg; no tool-count/schema/INDEX_VERSION change. Tests `tests/test_source_freshness.py` (13); suite 725 passed / 1 skipped.
-- **Prior: 1.29.1** — **the first `import sentence_transformers` must happen on the MAIN thread, before the stdio loop** (issue #3, reported by MotoMato85 with root cause + fix already isolated). `check_embedding_drift` / `embed_dataset` hung FOREVER over stdio on Windows on any call that had to run a real encode; cache-hit calls returned fine, and the same call in-process returned in ~7s. Cause: the lazy `from sentence_transformers import ...` inside `embeddings._embed_sentence_transformers` runs in the `asyncio.to_thread` worker that `call_tool` dispatches into, so torch's native DLLs load from a NON-main thread while the main thread has a pending stdio pipe read — a Windows loader-lock deadlock. **The tool logic was never at fault**, which is exactly why it reads as a jdata bug and isn't one. New `embeddings.warm_up_provider()` imports the backend on the CALLING thread; `server.main()` calls it after `parse_args` and before `asyncio.run`. Gated on the provider (only `sentence_transformers` loads native code — gemini/openai stay lazy), never raises (a broken torch must not stop startup), opt out with `JDATAMUNCH_EAGER_EMBED_IMPORT=0`. Cost is honest and DISCLOSED in the README: `initialize()` goes ~3.5s → ~8.5s when `JDATAMUNCH_EMBED_MODEL` is set, and the hang goes away (measured both directions on Windows 11 with a standalone stdio `ClientSession` probe — before: no return past 90s; after: 1.6s). ⚠ **Siblings are structurally exposed the same way** — jcm `tools/embed_repo.py:67` and jdoc `embeddings/provider.py:320` lazy-import ST and dispatch through `to_thread`; NOT yet reproduced or fixed there. Also fixed two FALSE-GREEN dispatch tests (`test_v1_15_0`, `test_v1_16_0`): they passed `storage_path` in the arguments dict, but **`call_tool` takes the storage root from `DATA_INDEX_PATH` and ignores the argument**, so they were reading the developer's real `~/.data-index`. Tests `tests/test_v1_29_1.py` (9, incl. an AST guard that the warm-up precedes `asyncio.run`); suite 676 passed / 1 skipped. No tool/schema/INDEX_VERSION change. ⚠ **Follow-up (same day, no version bump): three CI skips that were passing for the wrong reason.** `xlrd` was ALREADY in the `excel` extra — the missing piece was **`xlwt`, which the `sample_xls` fixture needs to WRITE the file**, so the whole `.xls` class skipped on every CI run; added to the dev group (test-only, verified working on 3.13 despite being unmaintained since 2017). `pyarrow` was never installed either, so CI now syncs `--extra excel --extra parquet`. And **my own warm-up success tests gated on sentence-transformers, which CI does not install (torch ~2 GB)** — the point of the fix was unverified where it runs; now stubbed via a `fake_st` module fixture, with the real-library assertion kept as a separate non-vacuity test. CI-equivalent env (`uv run --python 3.13`) went 676 passed → **697 passed**. ⚠ **`uv.lock` is gitignored here and must stay untracked** — CI runs plain `uv sync`, not `--locked`, so a committed lock silently changes resolution; one got swept in by a `git add -A` and had to be reverted ([[feedback_git_add_all_sweeps_untracked]]).
-- **Prior: 1.27.0** — **5th absence refusal rule: a REWRITE underneath a scan cannot prove absence — and unlike the stale gate, this one is ENFORCED here, not disclosed.** Suite parity with jcm v1.108.168 / jdoc v1.119.0. v1.26.0 shipped only the rules jData's verdict can back (only `absent`; truncated walk does NOT) and **disclosed** freshness as untracked rather than gating it. **The key insight: "was this rewritten while I read it" is a FILESYSTEM FACT, not a freshness model** — so unlike the stale gate it is genuinely backable here, the same way the truncation gate is real. Zero results + detected rewrite ⇒ `degraded`, so the rule falls out of the existing "only `absent` proves absence" check; `absence_refusal` gains a rebuilding branch BEFORE the generic state check. **`channels.index: "rebuilding"` is present ONLY as a positive detection** — the siblings carry a permanent `fresh`/`stale` channel, jData must NOT (a standing `fresh` would assert currency this product cannot verify). We can prove it IS being rewritten; we cannot prove it is current. **The v1.26.0 DISCLOSE line ("index freshness: not tracked by this product") STANDS — this rule adds to it, never replaces it** (pinned by a test). ⚠ **The dataset mtime spans `data.sqlite` + its `-wal`, NOT just `index.json`** — the ROWS a search scans live in the SQLite store, so a reindex rewriting rows must register even when the metadata monolith is untouched; a guard watching only index.json misses the common case (there is a test for exactly this). **Unknown ≠ changed**: unstamped index → False, AND `_dataset_mtime_ns() == 0` (nothing readable) → False — a test caught that returning 0 vs a stamped mtime read as "changed". New `storage/data_store.py::_dataset_mtime_ns` / `_stamp_load_provenance` / `index_changed_since_load`; stamped at `DataStore.load`'s single return. Files: `storage/data_store.py`, `verdict.py`, `handoff.py`, `tools/search_data.py`. Tests `tests/test_v1_27_0.py` (15); suite 638 passed/1 skipped; ruff clean. NO tool/schema/INDEX_VERSION change.
-- **Prior (1.26.0):** (absence evidence — cite a zero-result scan as proof (handoff/v2 phase 3), suite parity with jcm v1.108.166 / jdoc v1.117.0 (jcodemunch-mcp#377 phase 3, design by @mightydanp). A zero-result `search_data` was uncitable under v1/v2 (nothing served → no id), yet "searched the dataset, no such column/value" is the claim a data audit most needs. No new machinery: `verdict.build_verdict` already emits state/channels/coverage/scorer; new `handoff.note_absence` records those under `absent:<sha256[:12]>` over `(tool, dataset, query, scope)`. Flow = server hands the token, agent cites back: an `absent` verdict carries `_meta.absence_evidence.ref`, re-attached AFTER the default meta_fields strip (jdata's `get_meta_fields()` → [] strips `_meta`, the same v1.21.0 budget-block pattern). `finalize_handoff` routes absence refs through `_validate_evidence` (now a 3rd `refused` return); receipt gains `absence_attested`. **REFUSAL RULES (his, verbatim, each pinned): only `absent` proves absence; `degraded` does NOT (keyword-only = partial scan); a TRUNCATED walk does NOT (`coverage.walk == "truncated"` — the target may sit in dropped rows).** Refused scan STILL RECORDED so citing returns the REASON (`refused_absence` / `refused_absence_claims`), not unknown-ref; absent-but-not-citable says so in-band (`absence_evidence.citable:false` + `blocked_by`). **⚠ HONEST DIVERGENCE — the DISCLOSE product call (jjg, 2026-07-24):** jData's verdict has NO `index` channel (never models freshness), so the STALE-index gate its siblings enforce CANNOT fire here. Rather than ship a rule that reads enforced and isn't, every jData absence proof states `index freshness: not tracked by this product` in the rendered body. Absence stays citable, honestly weaker than jcm/jdoc. `_SCOPE_ARGS = ("search_scope",)` (jData-flavored; "all" narrows nothing). Detail renders ONCE (under its claim, else global index). Content-addressed, session-scoped, in-memory, capped 500, never on disk. Tests `tests/test_v1_26_0.py` (25, incl. live `call_tool` chokepoint e2e); suite 644. No tool/schema/INDEX_VERSION change. #377 stays open: P2 (receipts) + P4 (requirement matching) deferred.)
-- **Prior: 1.25.0** (claim-scoped evidence — suite parity with jcm v1.108.165 / jdoc v1.116.0 (jcodemunch-mcp#377 phase 1, design by @mightydanp). A handoff section may now carry caller-authored `claims`, each with its OWN `evidence_refs`. v1 proved a ref was retrieved this session but never bound it to a sentence — refs landed in ONE global block at the end of the body. New `_validate_claims` takes `{id, statement, evidence_refs, classification?}`; **ids unique across the WHOLE handoff, not per section** (the id is the citation anchor — two sections owning one id makes a citation ambiguous); statements/classifications preserved VERBATIM (server never authors); each claim's refs attested SEPARATELY through the unchanged `_validate_evidence`, so an unknown ref returns `invalid_claims: [{claim_id, unknown_refs}]` naming the claim instead of one global failure list. `render_handoff` prints `### <statement>` + `- Claim id:` + indented evidence, and takes the schema string as a param. **Three calls carried from jcm:** (1) the INPUT picks the contract — no claims anywhere ⇒ schema stays `jdatamunch.handoff/v1`, body BYTE-IDENTICAL to v1, `claims_attested` omitted (not `0`); any claim ⇒ `.../v2`. (2) claims can satisfy `evidence_refs` (top-level may be empty when claims carry refs — strictly more permissive). (3) claim refs join the canonical index, caller order first, so a v1 consumer reading a v2 handoff sees every ref where it expects. Section `content` optional ONLY when claims present. Additive/1.x, NO INDEX_VERSION or tool-count change. Tests `tests/test_v1_25_0.py` (18, incl. the byte-identical-v1 guard); suite 598. ⚠ **Known limit, disclosed on #377 first:** phase 1 does NOT narrow what counts as a match — a dataset-wide ref still attests a column-level claim. That's phase 2 (evidence receipts), DEFERRED.)
-- **Prior: 1.24.0** (canonical handoff contract — suite parity with jcm v1.108.162 (#374 there) / jdoc v1.114.2. New `handoff.py`: `finalize_handoff` tool + `munch://handoff/<id>` resource (`jdatamunch.handoff/v1`). Assistant authors; server assembles/attests/persists/serves. Attestation substrate = session retrieval record OWNED BY handoff.py (jdata has no yield tracker): server chokepoint records search_data `result` rows (NOTE: key is `result` not `results`) + dataset args from describe_dataset/sample_rows/get_rows + describe_column → `note_served_rows`/`note_served_column`; ref = served column id `<dataset>::<column>#column` OR dataset name OR dataset component of a served id; unknown → in-band error + `unknown_refs` (jdata error convention, no isError). Deterministic body (no timestamps), id = sha256[:16], byte-identical resource reads, canonical:true ADVISORY. `_TOOL_TIER_STANDARD` + `_NON_READONLY_TOOLS`; tool count 38→39. Tests `tests/test_v1_24_0.py` (15, incl. real-CSV chokepoint end-to-end via DATA_INDEX_PATH env); suite 580. PyPI + auto tag/release w/ artifacts.)
-- **Prior: 1.23.1** (BM25 tokenizer: Unicode word splitting + CJK character bigrams — suite parity with jdoc v1.114.1 (#91 there, @tetiz123) / jcm v1.108.161. `bm25.tokenize`'s `[A-Za-z0-9_]+` treated every non-ASCII char as a separator: CJK column names/summaries/sample values produced zero tokens (search_data keyword ranking dead for those datasets), accented Latin mangled. Now `\w+` (underscore kept inside tokens so `user_id` stays whole) + `_CJK_RX` space-padding + overlapping character bigrams via `_cjk_bigrams` (lone char passes through); identical expansion at index and query time = the match signal. Pure-ASCII byte-identical. NO reindex (tokenization at search time). Tests appended to `tests/test_bm25.py` (+5); full suite 565 passed / 1 skipped. PyPI + auto tag/release w/ artifacts via Release workflow.)
-- **Prior: 1.23.0** (tool-surface schema receipt — suite parity with jcm v1.108.153 / jdoc v1.112.0. `get_session_stats` `result` gains an advisory `tool_surface` block: visible vs catalog tool counts (after JDATAMUNCH_TOOL_PROFILE + JDATAMUNCH_DISABLED_TOOLS filtering), schema tokens for each at bytes/4 over the {name, description, inputSchema} serialization, `schema_tokens_avoided`, `heaviest_tools` top-15, `estimator:"bytes/4"`. New `server.py::_tool_surface_stats()` after `_filter_tools`; wired in the get_session_stats dispatch branch under try/except (failure → block omitted). No `surface` key (Counter is jcm-only); `profile` carried. Additive/1.x, no INDEX_VERSION bump. Tests `tests/test_v1_23_0.py` (5); full suite 560 passed / 1 skipped.)
-- **Prior: 1.22.0** (runtime identity resource — suite parity with jcm v1.108.152 / jdoc v1.111.0 (jcodemunch-mcp#371, @rknighton). New `runtime_identity.py` module + `munch://runtime/identity` MCP RESOURCE (`munch.runtime.identity/v1`): schema/product/version/transport(always "stdio" here)/pid/`process_start {value, source}`/`instance_id` (uuid4 once per process lifetime)/optional `launch_id` echo of `JDATAMUNCH_LAUNCH_ID` (fallback `MUNCH_LAUNCH_ID`, omitted when unset). `process_start`: Windows GetProcessTimes via ctypes (argtypes/restype set — pseudo-handle truncates on 64-bit otherwise), Linux /proc starttime+btime, else first-read clock DISCLOSED as `source:"self_recorded"`. Wired at the previously-empty `list_resources` + new `read_resource` handler (`ReadResourceContents` from `mcp.server.lowlevel.helper_types`). Resource not tool — NO tool-count/schema change; on-demand only, no bg/network. Deliberately excluded: command lines/env/cwd/hostnames/dataset paths. Tests `tests/test_v1_22_0.py` (11); full suite 576 passed. README env row + "Runtime identity resource" section.)
-- **Prior: 1.21.0** (advisory session token budget — suite parity with jcm v1.108.146 / jdoc v1.104.0. `JDATAMUNCH_SESSION_TOKEN_BUDGET` env (unset/0/garbage = off) sets an advisory ceiling over response tokens served, counted at the single JSON return chokepoint in `server.py` `call_tool` via new `storage/token_tracker.py` helpers `record_response_text`/`get_session_response_tokens`/`budget_status` (ok / approaching >=80% / over >=100%) + `reset_session_response_tokens` test hook. `_meta.budget {limit, spent, state}` attaches at approaching/over — AFTER meta_fields filtering, since jdata's default strips `_meta` (`get_meta_fields()` → []). `get_session_stats.result` gains `session_response_tokens` + `budget` block when configured. DISTINCT from the pre-existing `budget.py` `enforce_budget` (per-response truncator); this is cumulative-session, warn-only, never blocks. Additive/1.x, no INDEX_VERSION bump, inline compute. Tests `tests/test_v1_21_0.py` (9); full suite 544 passed / 1 skipped. README env table row added.)
-- **Version:** 1.20.0 (coverage contract on absence claims — suite parity with jcm v1.108.145, prompted by community feedback on the retrieval-verdict article: an `absent` verdict backed only by scan counts lies by omission when data was excluded at index time. INDEX-TIME: `index_local` persists a `coverage` block in index.json (`walk` full/truncated, `rows_indexed`, nonzero `skip_counts`, `recorded_at` UTC); skip reasons = `malformed_rows` (JSONL parse failures, tallied via a shared dict the jsonl row generator fills into metadata["skip_counts"]) + `rows_over_cap` (drain-counted exactly when the JDATAMUNCH_MAX_ROWS cap hits — EXCEPT depth="shallow", which records `walk:"truncated"` with no count rather than paying a full drain or fabricating). Incremental fast path preserves the block; full re-ingest overwrites (self-heals). Additive DataIndex field, None default — NO INDEX_VERSION bump; legacy indexes load fine. `index_repo` tallies discovery exclusions (unsupported_extension/skipped_path/oversize/over_file_limit/download_failed/index_error), returns a repo-level coverage block + persists `.repo-coverage-<prefix>.json` sidecar next to the `.repo-sha` marker (`_discover_data_files` now returns `(files, skip_counts)` tuple). QUERY-TIME: `search_data`'s `_meta.verdict` attaches `coverage` (`generation.indexed_at`/`index_version`, `rows_indexed`, `excluded`) on `absent`/`degraded` ONLY; ok stays lean; legacy/no-coverage index → block omitted (empty = unknown, never fabricated). Also adds `verdict.SCORER_VERSION = 1` pin emitted as `"scorer"` in every verdict. New `verdict.build_coverage_disclosure()`. Tests `tests/test_v1_20_0.py` (13); `test_index_repo.py` discovery tests updated for the tuple return.)
-- **Version:** 1.19.1 (docs only. Documentation wording only; no code, wire, or behavior change from 1.19.0.)
-- **Version:** 1.19.0 (update model price constants to current Anthropic pricing. Anthropic has reduced input pricing across the Opus line since these models launched. `storage/token_tracker.PRICING` (feeds `cost_avoided()`, emitted in `_meta` on nearly every tool response: describe_dataset/get_rows/sample_rows/aggregate/join_datasets/get_session_stats/describe_column/get_data_hotspots) now tracks the current published rates: Opus $5/MTok, Sonnet $3/MTok, Haiku $1/MTok. Set `claude_opus` to $5; additively added `claude_sonnet` ($3) + `claude_haiku` ($1) for the full current model set (parity with jcm). `claude_opus` + `gpt5_latest` keys unchanged in name, so 1.x wire-compatible (additive keys). Token savings measured in tokens, valued at the applicable model rate — underlying savings unchanged, only the constants track current pricing. Does not touch the public token counter (tokens stored, valued at display time). No INDEX_VERSION bump, no tool add/rename. Tests: token/cost/session_stats/storage/aggregate suites green (27). Suite parity: jcm v1.108.130 (receipt) + jdoc v1.97.0 (same constants). **Framing note: tracks a vendor price REDUCTION, NOT a correction of an inflated figure — never describe as "overstating."**)
-- **Version:** 1.18.0 (suite-parity retrieval verdict — Phase 3 of the suite-wide `_meta.verdict` work (jcm v1.108.116/.117 for code, jdoc v1.95.0 for docs). `search_data` now carries `_meta.verdict`: an empty column search is positive, token-saving evidence. States `ok` / `absent` / `degraded` — NO `low_confidence` (jData scores are rank-normalized, top always 1.0, so there's no calibrated confidence signal to threshold; fabricating one would be dishonest). `degraded` = semantic requested but the embedding channel fell back to keyword-only (precedence over `absent`); `absent` carries a `did_you_mean` list of column names containing a query term. Clean-room jData impl in new top-level `verdict.py` (`build_verdict` / `suggest_columns`); wire shape shared with siblings, no cross-suite import. Additive/1.x, no `INDEX_VERSION` bump, inline compute. Tests `tests/test_v1_18_0.py` (9).)
-- **Version:** 1.17.0 (MCP `readOnlyHint` annotations — suite parity with jcodemunch PR #361 + jdoc. Every tool now advertises `ToolAnnotations(readOnlyHint=...)` at the `list_tools` chokepoint (`_apply_readonly_annotations`, non-mutating `model_copy`) so Claude Code plan mode runs jData's query tools silently while still prompting on the write-set. `_NON_READONLY_TOOLS` = index_local, index_repo, summarize_dataset, delete_dataset, embed_dataset, ingest_sql_log, tune_weights, check_embedding_drift — any tool that can mutate persistent state under ANY arg (conservative bias: mislabeling a writer read-only is the harmful direction; run_sql is SELECT-only so it's read). Additive/1.x-compatible (new tools/list field). Tests `tests/test_v1_17_0.py` (4). **Note: `check_embedding_drift` is marked False here (force=true writes the canary); jcm marks it True — jcm is the mild outlier, align later if it matters.**)
-- **Version:** 1.16.0 (`analyze_perf`: per-tool latency + cache-hit telemetry. Completes the parity trio (jcm/jdoc both ship it). jData had NO latency telemetry + an uninstrumented cache; added both. New `perf.py` = in-memory per-tool latency ring (always on, 500/tool) + optional SQLite sink at `<index_path>/perf_telemetry.db` gated by `JDATAMUNCH_PERF_TELEMETRY=1` (FIFO cap `JDATAMUNCH_PERF_TELEMETRY_MAX_ROWS`, default 100k); `server.py` `call_tool` records each dispatch's wall-clock + ok flag (best-effort, never breaks a call). `storage/result_cache.py` gained per-tool hit/miss counters (`cache_stats()`) + `get()` takes optional `tool` (aggregate/get_correlations/get_data_hotspots pass it). New `analyze_perf` tool: `window=session` reads the ring, `1h|24h|7d|all` reads the sink; returns p50/p95/max/error_rate, slowest-by-p95, cache hit rates. Tool count 37 -> 38. **jData now has full agent-facing tool parity with its siblings — parity trio COMPLETE.** Tests `tests/test_v1_16_0.py` (12).)
-- **Version:** 1.15.0 (`check_embedding_drift`: catches silent embedding-provider drift. Column embeddings power semantic `search_data` + `find_similar_columns`; if the provider model changes underneath a stored index (revision bump / reweight / swapped local model), saved vectors stop matching the live encoder and semantic ranking quietly degrades. New `embed_drift.py` pins a 16-string canary (data/column-flavored strings, not code tokens) in `<index_path>/embed_canary.json` and recomputes it on demand; `force=true` re-pins, otherwise reports max/mean cosine drift + per-canary, `alarm` when worst > `threshold` (default 0.05). Reuses jData's own `embeddings.detect_provider`/`embed_texts`/`cosine_similarity`. Closes the 2nd of the parity trio (jcm/jdoc both ship it). Tool count 36 -> 37. Tests `tests/test_v1_15_0.py` (9). Remaining parity gap: `analyze_perf`.)
-- **Version:** 1.14.0 (`tune_weights`: the `search_data` ranking weight vector (name/value/type match weights plus the BM25 and semantic blend scales), previously hardcoded module constants, is now tunable and persistable per-dataset and honored at query time. Inspect / set / reset; overrides validated + clamped and stored in `<index_path>/ranking_tuning.json` (per-dataset wins over global wins over defaults). Closes the sibling-parity gap, since jcm and jdoc both ship `tune_weights`. Honest divergence: jData keeps no ranking-events ledger (`call_tracker` is ephemeral loop-detection), so tuning is explicit, not learned. New `tuning.py` owns the weight defaults (`DEFAULT_WEIGHTS`) + persistence; `search_data` resolves weights via `load_effective_weights` and honors a tuned `default_semantic_weight` when the caller omits `semantic_weight`. Tool count 35 -> 36. Tests `tests/test_v1_14_0.py` (14). Backstory: 2026-06-16 jData audit. v1.13.0/1.13.1 were docs-only, savings-meter disclosure + pricing sync.)
-- **Version:** 1.12.2 (Adds `jdatamunch_guide` sibling-parity tool. Returns the version-current CLAUDE.md / AGENT.md policy snippet for jdatamunch-mcp so an agent can keep a one-line CLAUDE.md `"Call jdatamunch_guide and strictly follow its instructions."` instead of pasting a static block that drifts. Mirrors jcm's `jcodemunch_guide` and jdoc's `jdocmunch_guide`. Tool count 35 -> 36. Backstory: issue #296 on jcm.)
-- **Version (v1.12.1):** Hygiene patch. `__version__` now derived from `importlib.metadata.version("jdatamunch-mcp")` in `__init__.py` — pyproject.toml is the single source of truth, the runtime/packaging version strings can no longer disagree. Mirrors jcm's pattern. Backstory: v1.12.0 shipped with the hardcoded literal stuck at 1.9.0, three minors stale.
-- **Version (v1.12.0):** Phase-2 jData COMPLETE — `find_similar_columns`: multi-signal cross-dataset column consolidation. Fuses name (token Jaccard, snake+camel aware) + type + top-value Jaccard + cardinality + embedding cosine (when present). Union-find clustering; verdict tiers: near_duplicate / naming_drift / parallel_definition / overlapping_topic. Differs_by breakdown per pair makes verdict auditable. Mirrors jcm's find_similar_symbols.
+**Tests:** `PYTHONPATH=src python -m pytest tests/ -q` (without `PYTHONPATH`, an
+installed copy shadows `src/`). CI syncs first: `uv sync --group dev --extra
+excel --extra parquet`, then runs pytest; compare TOTAL test counts across
+interpreters, never only the passed count.
+
+Maintainers may also have a `CLAUDE.local.md` here (gitignored), which loads
+private working notes. Nothing in this file depends on it.
+
+## Project facts
 - **GitHub:** `jgravelle/jdatamunch-mcp`
 - **Python:** >=3.10
-- **Index format:** INDEX_VERSION = 3 (v1→v2→v3 migrations registered in `storage/migrations.py`; v3 is additive — new runtime tables created on first ingest, legacy v2 indexes load fine)
-- **Tool count:** 38 (1.6.0 added `ingest_sql_log`; 1.7.0 added `find_unused_columns`; 1.8.0 added `check_column_drop_safe`; 1.9.0 added `get_schema_impact`; 1.10.0 added `get_redaction_log` + `get_data_hotspots` v2; 1.11.0 added `data_health_radar` + `diff_data_health_radar`; 1.12.0 adds `find_similar_columns`; 1.14.0 adds `tune_weights`; 1.15.0 adds `check_embedding_drift`; 1.16.0 adds `analyze_perf`)
-- **Tests:** 470 passed, 10 skipped (1.12.0)
+- **Index format:** INDEX_VERSION = 3 (v1→v2→v3 migrations registered in
+  `storage/migrations.py`; v3 is additive — new runtime tables are created on
+  first ingest, legacy v2 indexes load fine)
+- **Version:** `pyproject.toml` is the single source; `__version__` comes from
+  `importlib.metadata`, so it reads `"unknown"` under `PYTHONPATH=src`.
+- Per-release notes live in `CHANGELOG.md` and the GitHub releases.
 
-## Issue + release policy (suite-wide, 2026-07-28)
+## Engineering lessons
+
+Rules that outlived the releases that produced them. Each names the version it
+came from.
+
+**Honest output**
+
+- ⚠⚠ **A count with no time basis gets the wrong one supplied by the
+  reader**, usually "per request". `tool_surface.schema_tokens_avoided` now
+  carries `SCHEMA_TOKENS_BASIS` / `_NOTE` beside it (the schema block is
+  cache-read after the first hit). The fix is a LABEL, never a silently scaled
+  number. Constants live in ONE module (`schema_token_basis.py`); a test fails if
+  a literal appears in a second. (1.31.13)
+- ⚠ **Weigh what the client RECEIVES** (`_filter_tools`, including
+  force-included tools), through the one weigher `server._schema_weight`. Tier
+  sizes are measured by `benchmarks/harness/run_tier_surface.py` into a committed
+  `tier_surface.json`, never hand-typed. (1.31.13)
+- ⚠ **A setting that implies a saving it does not deliver is a defect.** The
+  `standard` tier drops three tools and 5.6% of the schema payload; it stays as a
+  capability bundle and is documented as not a token saving. (1.31.13)
+- ⚠⚠ **A disclosure inside `_meta` is deleted by the default config**
+  (`get_meta_fields()` returns `[]`). Anything the caller must see is re-attached
+  TOP-LEVEL after filtering: `truncated` + `truncated_note` (1.31.2), the
+  absence-evidence ref (1.26.0), the session budget block (1.21.0). A silently
+  shortened answer is worse than a refused one.
+- ⚠ **Tool descriptions say what they do NOT grade.** `get_dataset_health`
+  grades structure and completeness, not whether values are right;
+  `validate_index` checks the index, not the data; `suggest_keys` ranks from
+  profile statistics. Every clause is derived from the tool's own guards or
+  schema defaults. (1.31.7)
+- ⚠ **Pricing-constant changes track vendor prices.** A price reduction is not a
+  correction of an inflated figure; never describe it as one. Price keys are wire
+  format and never rename on 1.x. (1.19.0)
+
+**Verdicts, freshness and absence**
+
+- ⚠⚠ **Sample a probe BEFORE the work it guards.** `index_changed_since_load`
+  was read after a semantic search that lazily embeds and persists columns into
+  the same `data.sqlite`, so every dataset's first search reported itself as
+  rewritten. Notes are keyed on the CAUSE of `degraded`, not the state; an
+  unknown cause falls back to the state note. (1.31.11)
+- ⚠⚠ **Only `absent` proves absence.** `degraded` (keyword-only, partial scan)
+  does not; a truncated walk does not. A refused scan is still recorded so citing
+  it returns the reason. jData has no index-freshness channel, so every absence
+  proof states `index freshness: not tracked by this product`. (1.26.0)
+- ⚠ **A rewrite underneath a scan is a filesystem fact and IS enforced**: zero
+  results + detected rewrite ⇒ `degraded`. The dataset mtime spans `data.sqlite`
+  and its `-wal`, not just `index.json`. Unknown is not changed: an unstamped
+  index or an unreadable mtime reads as unchanged. `channels.index: "rebuilding"`
+  appears only as a positive detection, never a standing `fresh`. (1.27.0)
+- ⚠⚠ **`fresh` is reachable only via `verify_source=True`**, which re-hashes the
+  source. The cheap default proves `stale` / `missing_source` with a `stat` and
+  otherwise says `unknown`; a matching size does not prove matching content.
+  `source_freshness` can never return `fresh` (a test pins it). (1.30.0)
+- ⚠ **Coverage: empty means unknown, never fabricated.** `depth="shallow"`
+  records `walk:"truncated"` without a count rather than draining or guessing.
+  (1.20.0)
+- ⚠ **No `low_confidence` verdict state**: jData scores are rank-normalized (the
+  top is always 1.0), so there is no calibrated signal to threshold. (1.18.0)
+- ⚠ **Handoff claim ids are unique across the whole handoff** (they are citation
+  anchors). With no claims, a handoff stays `jdatamunch.handoff/v1` and
+  byte-identical. (1.25.0)
+- ⚠ **The offloadable annotation LABELS and never routes**; it fails closed, and
+  a default call is refused because freshness is unknown. `offload` is GENERATED
+  from jcodemunch-mcp's module and a pinned `CONTRACT_DIGEST`; never hand-edit it.
+  (1.31.0)
+
+**Process, stdio and platforms**
+
+- ⚠⚠ **JSON-RPC owns a private stdout.** `redirect_stdout` rebinds `sys.stdout`
+  only; a C extension, an inherited fd 1 or another thread still writes to the
+  framed stream. `stdio_guard.claim_stdout()` dups the real stdout for the
+  transport and points fd 1 at stderr. Its tests run REAL subprocesses. (1.31.6)
+- ⚠⚠ **The first `import sentence_transformers` happens on the MAIN thread,
+  before the stdio loop** (`embeddings.warm_up_provider()`). Imported inside an
+  `asyncio.to_thread` worker, torch's native DLLs deadlock on the Windows loader
+  lock. Opt out with `JDATAMUNCH_EAGER_EMBED_IMPORT=0`. (1.29.1)
+- ⚠ **`call_tool` takes the storage root from `DATA_INDEX_PATH`, not from the
+  arguments.** A test that passes `storage_path` in the arguments reads the real
+  `~/.data-index`. (1.29.1)
+- ⚠ **The `initialize` response carries an `instructions` string** (cap 1,000
+  chars), the one steering text that survives a host deferring tool schemas, and
+  `Server(..., version=__version__)` so `serverInfo` reports ours.
+  `tests/test_mcp_instructions.py` binds the prose to the catalog. (1.31.9)
+- ⚠ **Text IO and CLI output declare their encoding.** Without `encoding=`,
+  Windows uses cp1252; `sys.stdout` is UTF-8 on a terminal and the locale stream
+  when piped. `_force_utf8_stdio()` runs first in `main()`. (1.31.3)
+- ⚠ **BM25 tokenization is Unicode-aware**: `\w+` keeps `user_id` whole, and CJK
+  text gets overlapping character bigrams, identically at index and query time.
+  (1.23.1)
+- ⚠ **Mislabeling a writer as read-only is the harmful direction.** Any tool that
+  can mutate persistent state under any argument is in `_NON_READONLY_TOOLS`.
+  (1.17.0)
+
+**Tests, gates and packaging**
+
+- ⚠⚠ **Module-scope `pytest.importorskip` hides how many tests a file holds**: it
+  raises during import, so a 29-test file reports as one skip. Use
+  `importlib.util.find_spec`; `tests/test_optional_dep_skips_are_visible.py`
+  bans the pattern. A whole module missing is invisible from the passed count and
+  the skip count; only the TOTAL shows it. (1.31.10)
+- ⚠⚠ **ruff's rule set is explicit** (`select = ["E4","E7","E9","F"]`) and ruff
+  is in the dev group. An `ignore`-only config means whatever ruff shipped that
+  week (446 findings where 10 were intended). Widening the set is a decision, not
+  an upgrade. `tests/test_undefined_names.py` is the F821 gate. (1.31.4, 1.31.5,
+  1.31.9)
+- ⚠⚠ **`uv.lock` is gitignored and must stay untracked**: CI runs plain
+  `uv sync`, not `--locked`. Copy a sibling repo's INTENT, not its steps (its
+  `--locked` would fail here). (1.29.1, 1.31.4)
+- ⚠⚠ **The sdist credential guard builds a REAL sdist** (`tests/test_build.py`)
+  and scans it. `.claude/` is excluded only by `pyproject.toml`, so the exclude is
+  the only defense. The config check parses TOML, because a comment containing
+  `.claude/` satisfied a text scan; `.claude-plugin/` must not false-positive.
+  (1.31.12)
+- ⚠ **The license is declared on every surface with one identifier**:
+  `LicenseRef-jDataMunch-Dual-Use` in `pyproject.toml` (PEP 639, plus
+  `license-files`), `plugin.json` and the mcpb manifest. A `Version` line and an
+  identifier suffix imply each other both ways. PyPI metadata is immutable per
+  version. (1.31.8)
+- ⚠ **Run every text-scanning guard against the defect PUT BACK**, and add a
+  positive test for a correct shape it must not flag. (1.31.3, 1.31.12)
+
+## Issue + release policy
 
 **1. One issue, one verdict.** A multi-finding report gets SPLIT at triage into
 one issue per finding, cross-linked, credit on each. Detail is not discouraged;
 the reason is closure mechanics. A 4-finding issue closes only when the last one
 settles, so three finished fixes sit behind one unfinished conversation.
-⚠ **Do not optimize the open COUNT** — consolidating five jdoc issues into one
-gate (#95) is what produced a single artifact able to block a release.
+⚠ **Do not optimize the open COUNT** — consolidating five issues into one gate
+is what produced a single artifact able to block a release.
 
 **2. A release is NEVER blocked on an open issue**, including a verification we
 asked for. Done + tested + green ships on schedule, carrying a plain
@@ -59,8 +158,7 @@ retroactively. **Every timebox names its default action.**
 
 **3. A contributor's PR is never the only path.** Timebox and keep our own path warm.
 
-**3a. NO TIMEBOX WE OFFER RUNS LONGER THAN 24 HOURS — absolute, no exceptions**
-(jjg, 2026-08-14; closed to exceptions 2026-08-20). It covers every shape:
+**3a. NO TIMEBOX WE OFFER RUNS LONGER THAN 24 HOURS.** It covers every shape:
 signing the CLA, opening a PR already written, and taking an issue to implement.
 
 ⚠⚠ **The window is only fair BECAUSE the default action preserves credit.** At
@@ -70,25 +168,17 @@ never whether they are credited and never whether the fix ships. **Quote the
 default in the same comment as the deadline** — a clock with an unstated
 consequence reads as a threat, and it is not one.
 
-⚠⚠ **The failure mode has a name: a CLA hostage negotiation.** jcodemunch-mcp
-#443 ran EIGHT DAYS on a 2026-08-26 window — a real security fix, reviewed and
-green, held behind a 30-second form, while SEVEN of our own merges conflicted its
-branch. **Not one of those days bought anything.** A window over 24 hours
-purchases exactly one thing, the chance the contributor's commit is theirs, and
-pays for it in users' exposure to an unfixed defect.
-
 ⚠ **An extension the contributor ASKS FOR is not the same as a default we hand
 out**, and CONTRIBUTING.md invites the ask by name. Hold it when they ask; the
 clock exists to stop work going quiet, not to catch anyone out.
 
-⚠ **Do not shorten a timebox already posted.** A public promise outlives the
-policy that produced it. State the new window on new PRs.
+⚠ **Do not shorten a timebox already posted.** State the new window on new PRs.
 
 **3b. A MERGEABLE contributor PR merges BEFORE any changelog-touching work of
 our own.** Every entry we add occupies the same `[Unreleased]` block a
 contributor's entry occupies, so each of our merges conflicts their branch — and
 **a CONFLICTING fork PR has no `refs/pull/N/merge` and therefore gets NO CI AT
-ALL.** Their branch goes dark for a reason unrelated to their change.
+ALL.**
 
 ```bash
 GITHUB_TOKEN="" gh pr list --state open --json number,author,mergeable,mergeStateStatus   --jq '.[] | select(.author.login != "jgravelle") | "#\(.number) \(.author.login) \(.mergeable) \(.mergeStateStatus)"'
@@ -98,48 +188,29 @@ GITHUB_TOKEN="" gh pr list --state open --json number,author,mergeable,mergeStat
 and **we own the resolution** — push the merge to their branch and say on the
 thread that the conflict was ours.
 
-⚠⚠ **`license/cla` IS A REQUIRED STATUS CHECK ON `master` (2026-08-21).** Until
-that date this repo had NO BRANCH PROTECTION AT ALL, so the CLA was
-read and never enforced — an open PR read `MERGEABLE/UNSTABLE` and one distracted
-click could have merged unsigned code. jcm has had this since 2026-08-17 (policy
-3d); **a setting fixed in one repo of a suite is fixed in one repo.** All three
-now read `contexts ["license/cla"]`, `strict false`, `enforce_admins false`,
-force-push and deletion off.
-⚠ `enforce_admins: false` is deliberate — it is what lets a merge be pushed to a
-contributor's fork. `strict: false` avoids forcing a rebase after every release.
-⚠⚠ **This composes with the status-erasure hazard below and now FAILS CLOSED.**
-Our push to a fork wipes `license/cla` from the new head, and with the check
-required that reads as `BLOCKED` until the bot re-posts. Correct, and it will
-look like a new problem the first time.
+⚠⚠ **`license/cla` is a required status check on `master`.** `enforce_admins:
+false` is deliberate (it lets a merge be pushed to a contributor's fork), and
+`strict: false` avoids forcing a rebase after every release. Our push to a fork
+wipes `license/cla` from the new head, which reads as `BLOCKED` until the bot
+re-posts.
 
 ⚠⚠ **A FORK PR SHOWING ONLY `license/cla` HAS NOT BEEN TESTED — IT HAS BEEN
-SILENTLY HELD**, and `gh pr checks` lists only checks that RAN, so the hold is
-invisible from the place you would look. Measured on jdoc #122 and jdata #4 on
-2026-08-20: four and two held runs respectively.
+SILENTLY HELD**, and `gh pr checks` lists only checks that RAN.
 
 ```bash
 GITHUB_TOKEN="" gh api "repos/jgravelle/<repo>/actions/runs?status=action_required&per_page=30"   --jq '.workflow_runs[] | "\(.id)|\(.name)|\(.head_branch)"'
 GITHUB_TOKEN="" gh api --method POST "repos/jgravelle/<repo>/actions/runs/<id>/approve"
 ```
 
-⚠ **Both repos' `fork-pr-contributor-approval` was relaxed to
-`first_time_contributors_new_to_github` on 2026-08-20**, matching jcm since
-2026-08-13. Until then every first-time fork contributor's runs were created
-`action_required` and never executed.
-
 ⚠⚠ **Never answer "an issue is stuck" with aggregate stats** — the cost of a
-blocked issue is CONCENTRATED, not distributed; design at the OUTLIER. See
-[[feedback_dont_answer_pain_with_aggregates]].
+blocked issue is CONCENTRATED, not distributed; design at the OUTLIER.
 
-Surfaces: `CONTRIBUTING.md` (created 2026-07-28; jdata had none) +
-`.github/ISSUE_TEMPLATE/`.
+Surfaces: `CONTRIBUTING.md` + `.github/ISSUE_TEMPLATE/`.
 
 ⚠ **Dev deps are a PEP 735 `[dependency-groups]` block, NOT an extra** — there is
 no `.[test]` or `.[dev]`. Use `uv sync` (or `pip install -e . pytest
-pytest-asyncio pytest-cov`). The suite-wide CONTRIBUTING said
-`pip install -e ".[test]"` and was wrong in all three repos; CI never caught it
-because CI installs with `uv sync` and never runs the command the docs give a
-human.
+pytest-asyncio pytest-cov`). CI installs with `uv sync` and never runs the
+command the docs give a human, so check that command by hand.
 
 ## Key Files
 ```
@@ -220,7 +291,7 @@ src/jdatamunch_mcp/
   GITHUB_TOKEN="" gh run list --repo jgravelle/jdatamunch-mcp --limit 3 \
     --json headSha,conclusion,status,name
   ```
-- **PyPI is still manual**, and it runs through `uvx`, not through this box's
+- **PyPI is still manual**, and it runs through `uvx`, not through a dev box's
   interpreters. CI has no PyPI credential. To automate, add a publish job using
   PyPI Trusted Publishing (OIDC, no stored secret) once the publisher is
   configured on pypi.org.
@@ -248,7 +319,7 @@ src/jdatamunch_mcp/
   ⚠ The `python -m build` in the release.yml bullet above is **correct and must
   stay**: CI installs `build` and `twine` fresh in a clean runner, where none of
   this applies. The defect was only ever in the instruction aimed at a human on
-  this box. `tests/test_release_tooling_binding.py` pins both directions.
+  a dev box. `tests/test_release_tooling_binding.py` pins both directions.
 - **MCP registry** (published since 2026-08-06, nine-plus versions). When you
   read back a publish:
   ⚠⚠ **Each row is `{server: {...}, _meta: {...}}` (schema 2025-12-11).** `name`,
@@ -308,31 +379,20 @@ if a future tool needs a savings baseline.
   quietly rewritten — **a recomputed history is a guess wearing a measurement's
   clothes.**
 
-
 ## Maintaining this file
 
-⚠⚠ **`CLAUDE.md` is budgeted at 130,000 chars, gated by
-`tests/test_claude_md_size.py`.** The harness stops loading a project brief at
-150,000; the gap is deliberate, because a ceiling that fires at the cliff fires
-for the first time in the session it breaks. This file is ~54,600 today, so
-nothing needs rotating yet — the gate is armed in advance.
+⚠⚠ **`CLAUDE.md` is public** (it ships in the sdist), so it holds engineering
+rules only: no release narrative, no internal process notes.
+`tests/test_public_brief.py` fails if either returns. Per-release detail belongs
+in `CHANGELOG.md`; write a durable rule into "Engineering lessons" in neutral
+wording.
 
-⚠ When it fires, **rotate into the archive path named by `ARCHIVE` in that test,
-never delete.** The path is deliberately not repeated here: the gate asserts that
-a pointer and an archive imply each other in BOTH directions, so writing the path
-into this file before the archive exists is itself a failure — as it was when
-this section was first drafted, and the gate caught it.
-
-⚠ The gate also asserts the archive is tracked by git. `docs/` is not gitignored
-here, but it is in jcodemunch-mcp, where the first attempt at exactly this
-rotation wrote the archive somewhere a fresh clone would never see it. **"Does
-the file exist" answers a question about one working tree, not about the
-repository.**
-
-⚠ **The sibling repo is why this exists.** jcm's `CLAUDE.md` hit 200,543 chars
-and stopped loading on 2026-08-21 while its size practice was being followed:
-the practice named one section, and the growth was in the sections it did not
-name. **A rule that names one section licenses every other section to grow.**
+⚠⚠ **It is budgeted at 130,000 chars, gated by `tests/test_claude_md_size.py`.**
+The harness stops loading a project brief at 150,000; the gap is deliberate,
+because a ceiling that fires at the cliff fires for the first time in the session
+it breaks. ⚠ **A rule that names one section licenses every other section to
+grow**: jcodemunch-mcp's brief hit 200,543 chars and stopped loading while its
+size practice was being followed.
 
 ## Benchmarks
 Real production dataset (LAPD crime records, 1M rows):
