@@ -40,7 +40,9 @@ build-backend = "hatchling.build"
 # fresh clone never has it -- which is why the CI sdist guard grepping for
 # `.claude` cannot fire. It leaks only from a LOCAL build, and a local build
 # is how twine uploads happen.
-exclude = [".claude/"]
+# `CLAUDE.local.md` is the same case: a per-developer file, gitignored
+# globally, that a local build would otherwise ship at the sdist root.
+exclude = [".claude/", "CLAUDE.local.md"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/jdatamunch_mcp"]
