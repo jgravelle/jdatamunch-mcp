@@ -20,6 +20,14 @@ from .tdigest import TDigest
 from .hll import HyperLogLog
 from .semantic_types import detect_semantic_type
 
+# Version of the profiling rules. Bump it whenever a change alters the profile
+# an unchanged file would produce, so existing indexes are re-profiled (see
+# DataStore.needs_reindex). History:
+#   1: everything before 2026-11-04.
+#   2: datetime min/max compared as dates, not text; 12-hour AM/PM format
+#      detected.
+PROFILE_VERSION = 2
+
 _NULL_VALUES = frozenset([
     "", "null", "NULL", "none", "None", "N/A", "n/a", "NA", "na",
     "NaN", "nan", "-", ".", "#N/A", "#NA", "#NULL!", "n.a.", "N.A.",
@@ -38,16 +46,48 @@ TOP_VALUES_LIMIT = 50                   # top values stored for high-cardinality
 
 MAX_TYPE_VIOLATION_SAMPLES = 5
 
-# Common datetime patterns (regex → strptime format string)
+# Common datetime patterns (regex, strptime format string).
+# ORDER MATTERS: the first match wins. The 12-hour AM/PM pattern must come
+# before the 24-hour "%m/%d/%Y %H:%M:%S" one, which has no end anchor and would
+# otherwise claim "01/15/2020 12:00:00 AM" as 24-hour time.
 _DATETIME_PATTERNS = [
     (re.compile(r"^\d{4}-\d{2}-\d{2}$"), "%Y-%m-%d"),
     (re.compile(r"^\d{2}/\d{2}/\d{4}$"), "%m/%d/%Y"),
     (re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}"), "%Y-%m-%dT%H:%M:%S"),
     (re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"), "%Y-%m-%d %H:%M:%S"),
-    (re.compile(r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}"), "%m/%d/%Y %H:%M:%S"),
     # US date + 12h time with AM/PM (e.g. "01/15/2020 12:00:00 AM")
     (re.compile(r"^\d{1,2}/\d{1,2}/\d{4} \d{1,2}:\d{2}:\d{2} [AP]M$"), "%m/%d/%Y %I:%M:%S %p"),
+    (re.compile(r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}"), "%m/%d/%Y %H:%M:%S"),
 ]
+
+# Sort keys for datetime min/max. Text order is not date order for US dates
+# ("12/31/2023" sorts after "12/30/2024"), so the range is computed on a parsed
+# (year, month, day, hour, minute, second) tuple and the original text of the
+# winning value is kept for display. Timezone suffixes are ignored.
+_ISO_KEY_RX = re.compile(
+    r"^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?)?"
+)
+_US_KEY_RX = re.compile(
+    r"^(\d{1,2})/(\d{1,2})/(\d{4})(?: (\d{1,2}):(\d{2}):(\d{2})(?:\.(\d+))?(?: ([AP]M))?)?"
+)
+
+
+def _datetime_sort_key(value: str) -> Optional[tuple]:
+    """Return a chronologically sortable tuple for a recognised datetime string."""
+    m = _ISO_KEY_RX.match(value)
+    if m:
+        y, mo, d, h, mi, sec, frac = m.groups()
+        return (int(y), int(mo), int(d), int(h or 0), int(mi or 0), int(sec or 0),
+                float("0." + frac) if frac else 0.0)
+    m = _US_KEY_RX.match(value)
+    if m:
+        mo, d, y, h, mi, sec, frac, ampm = m.groups()
+        hour = int(h or 0)
+        if ampm:
+            hour = hour % 12 + (12 if ampm == "PM" else 0)
+        return (int(y), int(mo), int(d), hour, int(mi or 0), int(sec or 0),
+                float("0." + frac) if frac else 0.0)
+    return None
 
 
 def _is_datetime_str(value: str) -> bool:
@@ -116,6 +156,8 @@ class _ColAcc:
     dt_min: Optional[str] = None
     dt_max: Optional[str] = None
     dt_format: Optional[str] = None
+    dt_min_key: Optional[tuple] = None
+    dt_max_key: Optional[tuple] = None
 
 
 def _welford_update(acc: _ColAcc, x: float) -> None:
@@ -199,10 +241,14 @@ def update_acc(acc: _ColAcc, raw_value: str) -> None:
     # --- Datetime min/max ---
     if acc.type_rank == 2:
         if observed_rank == 2:
-            if acc.dt_min is None or stripped < acc.dt_min:
-                acc.dt_min = stripped
-            if acc.dt_max is None or stripped > acc.dt_max:
-                acc.dt_max = stripped
+            key = _datetime_sort_key(stripped)
+            if key is not None:
+                if acc.dt_min_key is None or key < acc.dt_min_key:
+                    acc.dt_min_key = key
+                    acc.dt_min = stripped
+                if acc.dt_max_key is None or key > acc.dt_max_key:
+                    acc.dt_max_key = key
+                    acc.dt_max = stripped
             if acc.dt_format is None:
                 acc.dt_format = _get_datetime_format(stripped)
 
