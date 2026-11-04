@@ -480,9 +480,11 @@ def _all_tools() -> list[Tool]:
         Tool(
             name="describe_dataset",
             description=(
-                "Primary orientation tool. Returns every column's name, type, cardinality, "
-                "null%, and sample values. A single call replaces reading the entire source file. "
-                "Equivalent to opening a spreadsheet and reading the column headers + stats. "
+                "Primary orientation tool. Default detail='compact' returns one row per column: "
+                "name, type, null%, distinct count, and the min/max (numbers, dates) or most "
+                "frequent values (text; every value when 10 or fewer), plus date formats and "
+                "unique columns. detail='full' adds samples, top values with counts, mean, median "
+                "and summaries. Statistics come from the index, not a re-read of the source. "
                 "On wide tables (60+ columns), results are auto-paginated — use columns=[] to "
                 "select specific ones, or columns_offset to page through remaining columns."
             ),
@@ -502,6 +504,12 @@ def _all_tools() -> list[Tool]:
                         "type": "integer",
                         "description": "Pagination offset for wide tables (default 0)",
                         "default": 0,
+                    },
+                    "detail": {
+                        "type": "string",
+                        "enum": ["compact", "full"],
+                        "description": "compact (default): one row per column. full: the full per-column profile.",
+                        "default": "compact",
                     },
                 },
                 "required": ["dataset"],
@@ -1850,6 +1858,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 columns=arguments.get("columns"),
                 columns_offset=arguments.get("columns_offset", 0),
                 storage_path=storage_path,
+                detail=arguments.get("detail", "compact"),
             )
         elif name == "describe_column":
             result = describe_column(
