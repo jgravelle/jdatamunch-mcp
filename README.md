@@ -206,7 +206,7 @@ Released under the **jDataMunch-MCP Dual-Use License** ([full terms](LICENSE)). 
 
 **Full jMunch suite (code + docs + data):** [Trio Builder, $99](https://jcodemunch.com/descriptions.php#builder) · [Trio Studio, $449](https://jcodemunch.com/descriptions.php#studio) · [Trio Platform, $2,499](https://jcodemunch.com/descriptions.php#platform)
 
-Individual developers and non-commercial projects need no license. Organizations deploying jDataMunch across internal teams do.
+Personal and other non-commercial use is free. Work use at a for-profit company, or for client or paid work, needs a license, paid once.
 
 ---
 
