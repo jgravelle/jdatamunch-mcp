@@ -155,6 +155,11 @@ def describe_column(
         result["datetime_max"] = col_data.get("datetime_max")
         result["datetime_format"] = col_data.get("datetime_format")
 
+    # Which non-empty tokens were counted in null_count (e.g. {"N/A": 12}).
+    # Absent on indexes profiled before PROFILE_VERSION 2.
+    if col_data.get("null_tokens"):
+        result["null_tokens"] = col_data["null_tokens"]
+
     if col_data.get("ai_summary"):
         result["ai_summary"] = col_data["ai_summary"]
 

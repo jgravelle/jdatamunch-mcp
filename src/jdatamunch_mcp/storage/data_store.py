@@ -104,6 +104,7 @@ def _profile_to_dict(p: Any) -> dict:
         "datetime_max": p.datetime_max,
         "datetime_format": p.datetime_format,
         "ai_summary": p.ai_summary,
+        "null_tokens": getattr(p, "null_tokens", None),
     }
 
 

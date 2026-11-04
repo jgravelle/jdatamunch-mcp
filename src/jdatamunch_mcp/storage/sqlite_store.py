@@ -8,10 +8,15 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Optional
 
-_NULL_VALUES = frozenset([
-    "", "null", "NULL", "none", "None", "N/A", "n/a", "NA", "na",
-    "NaN", "nan", "-", ".", "#N/A", "#NA", "#NULL!", "n.a.", "N.A.",
-])
+# Same split as the profiler (single source of truth there): placeholder tokens
+# such as "-" are NULL in integer/float/datetime columns and kept as text in
+# string columns.
+from ..profiler.column_profiler import _HARD_NULL_VALUES, _NULL_VALUES
+
+
+def _null_set_for(col_type: str) -> frozenset:
+    return _HARD_NULL_VALUES if col_type == "string" else _NULL_VALUES
+
 
 # SQLite type affinity per inferred column type
 _TYPE_AFFINITY = {
@@ -33,7 +38,7 @@ def _qcol(name: str) -> str:
 def _convert_value(value: str, col_type: str) -> Any:
     """Convert a raw string value to its native Python type for SQLite storage."""
     stripped = value.strip() if value else ""
-    if stripped in _NULL_VALUES:
+    if stripped in _null_set_for(col_type):
         return None
     if col_type == "integer":
         try:
@@ -96,7 +101,10 @@ def _make_col_converter(col_type: str):
     Pre-building one closure per column eliminates the string comparison
     inside _convert_value on every row (28M calls for a 1M-row, 28-col file).
     """
-    null_values = _NULL_VALUES
+    # Keyed on the PRELIMINARY type (first rows). If a column is promoted from
+    # numeric to text later in the file, placeholders already stored in it
+    # stay NULL while the profile counts them as values. Rare; accepted.
+    null_values = _null_set_for(col_type)
     if col_type == "integer":
         def _conv(v: str) -> Any:
             s = v.strip() if v else ""

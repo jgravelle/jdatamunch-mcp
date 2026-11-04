@@ -35,8 +35,15 @@ def test_bool_to_python_str():
 
 
 def test_canonical_null_token_collapses_to_empty():
-    for token in ("N/A", "null", "  null  ", "NaN", "-"):
+    for token in ("N/A", "null", "  null  ", "NaN"):
         assert normalize_native(token) == ""
+
+
+def test_text_placeholder_passes_through_for_the_profiler_to_decide():
+    # "-" is null only in a non-text column; that is decided downstream by
+    # column type, the same way a CSV cell is (PROFILE_VERSION 2).
+    for token in ("-", ".", " - "):
+        assert normalize_native(token) == token.strip()
 
 
 def test_string_passthrough_with_strip():
