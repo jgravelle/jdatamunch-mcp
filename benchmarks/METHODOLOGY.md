@@ -105,11 +105,11 @@ The harness indexes the file, tokenizes the baseline, runs each task against
 
 | Dataset | Avg Reduction | Avg Ratio (mean of per-task ratios) |
 |---------|:------------:|:---------:|
-| crime.csv (1M rows, 28 cols) | 99.996% | **25,333x** |
+| crime.csv (1M rows, 28 cols) | 99.999% | **99,059x** |
 
-⚠ **Not 100%.** Earlier revisions rounded 99.996% to `100.0%`, which asserts
+⚠ **Not 100%.** Earlier revisions rounded 99.996% (now 99.999%) to `100.0%`, which asserts
 total elimination rather than near-total. The ratio quoted here is the mean of
-the five per-task ratios; the ratio of the totals is 25,201.6x. See
+the five per-task ratios; the ratio of the totals over five reads is 97,495.9x. See
 [results.md](results.md) for both.
 
 ## Limitations
@@ -131,9 +131,9 @@ the five per-task ratios; the ratio of the totals is 25,201.6x. See
 CSV files are extremely token-dense from an LLM perspective: every row repeats
 the same value patterns, and a 1M-row file may contain >100M tokens of
 essentially redundant data. `describe_dataset` distills that into a compact
-schema profile (~3,800 tokens regardless of row count) by computing statistics
+schema profile (~900 tokens for 28 columns, regardless of row count) by computing statistics
 once during indexing. The ratio scales with row count — a 10-row CSV would
-show a modest improvement; a 1M-row CSV shows a 25,000x improvement because
+show a modest improvement; a 1M-row CSV shows a ratio near 100,000x because
 the schema profile stays nearly the same size.
 
 ---
