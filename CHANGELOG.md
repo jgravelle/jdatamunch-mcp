@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.33.0] - 2026-11-04
+
 ### Changed - `describe_column` returns a compact profile by default
 
 On the LAPD crime file, `describe_column` for a date column was 867 tokens on
