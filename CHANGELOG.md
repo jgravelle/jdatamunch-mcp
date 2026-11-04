@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.32.0] - 2026-11-04
+
 ### Changed - `describe_dataset` returns a compact orientation by default
 
 A realistic-agent benchmark on the LAPD crime file (1,004,894 rows, 28
