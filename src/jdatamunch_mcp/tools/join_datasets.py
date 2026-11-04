@@ -8,7 +8,7 @@ from typing import Optional
 from ..config import get_index_path
 from ..storage.data_store import DataStore
 from ..storage.sqlite_store import _qcol, _build_where
-from ..storage.token_tracker import estimate_savings, record_savings, cost_avoided
+from ..storage.token_tracker import estimate_savings, record_savings, per_call_costs
 
 # Hard caps
 MAX_JOIN_ROWS = 500
@@ -261,8 +261,7 @@ def join_datasets(
         "_meta": {
             "timing_ms": duration_ms,
             "tokens_saved": tokens_saved,
-            "total_tokens_saved": total_saved,
-            **cost_avoided(tokens_saved, total_saved),
+            **per_call_costs(tokens_saved, total_saved),
         },
     }
 

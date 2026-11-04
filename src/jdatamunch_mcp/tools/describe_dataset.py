@@ -6,7 +6,7 @@ from typing import Optional
 
 from ..config import get_index_path, MAX_COLUMNS_DESCRIBE
 from ..storage.data_store import DataStore
-from ..storage.token_tracker import estimate_savings, record_savings, cost_avoided
+from ..storage.token_tracker import estimate_savings, record_savings, per_call_costs
 from ..redact import redact_scalar_list
 
 # Compact orientation (the default since PROFILE_VERSION 2). One row per
@@ -167,8 +167,7 @@ def describe_dataset(
         "_meta": {
             "timing_ms": round((time.time() - t0) * 1000, 1),
             "tokens_saved": tokens_saved,
-            "total_tokens_saved": total_saved,
-            **cost_avoided(tokens_saved, total_saved),
+            **per_call_costs(tokens_saved, total_saved),
         },
     }
 
@@ -212,8 +211,7 @@ def _compact_response(dataset, idx, filtered, column_pagination, store, t0) -> d
         "_meta": {
             "timing_ms": round((time.time() - t0) * 1000, 1),
             "tokens_saved": tokens_saved,
-            "total_tokens_saved": total_saved,
-            **cost_avoided(tokens_saved, total_saved),
+            **per_call_costs(tokens_saved, total_saved),
             "redaction": {"applied": True, **redaction},
         },
     }

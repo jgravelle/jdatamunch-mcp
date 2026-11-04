@@ -520,6 +520,8 @@ def _all_tools() -> list[Tool]:
             description=(
                 "Deep profile of a single column. Full value distribution for low-cardinality "
                 "columns, histogram bins for numeric, temporal range for datetime. "
+                "Default detail='compact' gives counts, range or stats, and top values as "
+                "[value, count] pairs; detail='full' adds samples, percentages and a summary. "
                 "top_n capped at 200; histogram_bins capped at 50."
             ),
             inputSchema={
@@ -532,8 +534,13 @@ def _all_tools() -> list[Tool]:
                     },
                     "top_n": {
                         "type": "integer",
-                        "description": "Top values to return for categorical columns (default 20)",
-                        "default": 20,
+                        "description": "Top values to return (default 10 compact, 20 full)",
+                    },
+                    "detail": {
+                        "type": "string",
+                        "enum": ["compact", "full"],
+                        "description": "compact (default): fewer repeated keys. full: the full profile.",
+                        "default": "compact",
                     },
                     "histogram_bins": {
                         "type": "integer",
@@ -606,8 +613,8 @@ def _all_tools() -> list[Tool]:
                 "Filtered row retrieval via structured filters. All filters are SQL-parameterized "
                 "(no injection). Operators: eq, neq, gt, gte, lt, lte, contains, in, is_null, between. "
                 "Use columns=[] to project — reduces tokens significantly on wide tables. "
-                "Prefer aggregate() for summaries over paginating through rows."
-            
+                "Prefer aggregate() for summaries over paginating through rows. "
+                "Rows come back as arrays under a 'fields' header (row_format='objects' for dicts)."
                 " Returns at most limit rows (default 50); page with offset instead of raising it."
             ),
             inputSchema={
@@ -667,6 +674,12 @@ def _all_tools() -> list[Tool]:
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "Column names to exempt from redaction (e.g. an `email_hashed` column where the email pattern would false-positive).",
+                    },
+                    "row_format": {
+                        "type": "string",
+                        "enum": ["arrays", "objects"],
+                        "description": "arrays (default): 'fields' once, then one array per row. objects: one dict per row.",
+                        "default": "arrays",
                     },
                 },
                 "required": ["dataset"],
@@ -1864,11 +1877,12 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             result = describe_column(
                 dataset=arguments["dataset"],
                 column=arguments["column"],
-                top_n=arguments.get("top_n", 20),
+                top_n=arguments.get("top_n"),
                 histogram_bins=arguments.get("histogram_bins", 10),
                 redact=arguments.get("redact", True),
                 redact_patterns=arguments.get("redact_patterns"),
                 storage_path=storage_path,
+                detail=arguments.get("detail", "compact"),
             )
         elif name == "finalize_handoff":
             from . import handoff as _handoff_mod
@@ -1905,6 +1919,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 redact_patterns=arguments.get("redact_patterns"),
                 redact_skip_columns=arguments.get("redact_skip_columns"),
                 storage_path=storage_path,
+                row_format=arguments.get("row_format", "arrays"),
             )
         elif name == "aggregate":
             result = await asyncio.to_thread(

@@ -9,7 +9,22 @@ from ..redact import redact_rows, redaction_meta
 from ..security import validate_filter
 from ..storage.data_store import DataStore
 from ..storage.sqlite_store import query_rows, MAX_ROWS_RETURNED
-from ..storage.token_tracker import estimate_savings, record_savings, cost_avoided
+from ..storage.token_tracker import estimate_savings, record_savings, per_call_costs
+
+
+_ROW_FORMATS = ("arrays", "objects")
+
+
+def rows_to_arrays(rows: list) -> tuple:
+    """[{col: v}, ...] -> (fields, [[v, ...], ...]). Column names are written once."""
+    fields: list = []
+    seen: set = set()
+    for r in rows:
+        for k in r:
+            if k not in seen:
+                seen.add(k)
+                fields.append(k)
+    return fields, [[r.get(k) for k in fields] for r in rows]
 
 
 def get_rows(
@@ -24,6 +39,7 @@ def get_rows(
     redact_patterns: Optional[list] = None,
     redact_skip_columns: Optional[list] = None,
     storage_path: Optional[str] = None,
+    row_format: str = "arrays",
 ) -> dict:
     """Return filtered rows from the dataset via parameterized SQL queries.
 
@@ -38,6 +54,8 @@ def get_rows(
     """
     t0 = time.time()
 
+    if row_format not in _ROW_FORMATS:
+        return {"error": f"INVALID_ROW_FORMAT: row_format must be one of {list(_ROW_FORMATS)}, got {row_format!r}"}
     if limit == 0 or limit < 0:
         return {"error": "ROW_LIMIT_EXCEEDED: limit must be a positive integer"}
     if limit > MAX_ROWS_RETURNED:
@@ -116,11 +134,18 @@ def get_rows(
     tokens_saved = estimate_savings(idx.source_size_bytes, response_bytes)
     total_saved = record_savings(tokens_saved, str(store.base_path), tool="get_rows")
 
+    if row_format == "arrays":
+        # Same facts, keys once. With 28 columns and 50 rows the object form
+        # repeats every column name 50 times.
+        fields, arrays = rows_to_arrays(query_result["rows"])
+        reshaped = {"fields": fields, "rows": arrays}
+        reshaped.update({k: v for k, v in query_result.items() if k != "rows"})
+        query_result = reshaped
+
     meta: dict = {
         "timing_ms": round((time.time() - t0) * 1000, 1),
         "tokens_saved": tokens_saved,
-        "total_tokens_saved": total_saved,
-        **cost_avoided(tokens_saved, total_saved),
+        **per_call_costs(tokens_saved, total_saved),
     }
     if column_truncation:
         meta["column_truncation"] = column_truncation

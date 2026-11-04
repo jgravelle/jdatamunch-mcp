@@ -8,7 +8,7 @@ from ..config import get_index_path, MAX_COLUMNS_ROWS
 from ..redact import redact_rows, redaction_meta
 from ..storage.data_store import DataStore
 from ..storage.sqlite_store import query_sample
-from ..storage.token_tracker import estimate_savings, record_savings, cost_avoided
+from ..storage.token_tracker import estimate_savings, record_savings, per_call_costs
 
 
 def sample_rows(
@@ -98,8 +98,7 @@ def sample_rows(
     meta: dict = {
         "timing_ms": round((time.time() - t0) * 1000, 1),
         "tokens_saved": tokens_saved,
-        "total_tokens_saved": total_saved,
-        **cost_avoided(tokens_saved, total_saved),
+        **per_call_costs(tokens_saved, total_saved),
     }
     if column_truncation:
         meta["column_truncation"] = column_truncation

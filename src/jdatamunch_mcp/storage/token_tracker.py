@@ -189,6 +189,21 @@ def estimate_savings(raw_bytes: int, response_bytes: int) -> int:
     return max(0, (raw_bytes - response_bytes) // _BYTES_PER_TOKEN)
 
 
+def per_call_costs(tokens_saved: int, total_tokens_saved: int) -> dict:
+    """Cost and running-total fields for a single tool response's ``_meta``.
+
+    Empty by default since 2026-11-04: eight dollar figures and a running total
+    on every response were about 85-100 tokens per call, and
+    ``get_session_stats`` reports the same totals. Set
+    ``JDATAMUNCH_META_COSTS=1`` to restore them per call. ``tokens_saved``
+    stays on every response either way.
+    """
+    import os
+    if os.environ.get("JDATAMUNCH_META_COSTS", "").strip().lower() not in ("1", "true", "yes", "on"):
+        return {}
+    return {"total_tokens_saved": total_tokens_saved, **cost_avoided(tokens_saved, total_tokens_saved)}
+
+
 def cost_avoided(tokens_saved: int, total_tokens_saved: int) -> dict:
     """Return cost avoided estimates for this call and the running total."""
     return {

@@ -2,6 +2,64 @@
 
 ## [Unreleased]
 
+### Changed - `describe_column` returns a compact profile by default
+
+On the LAPD crime file, `describe_column` for a date column was 867 tokens on
+the MCP wire (cl100k) to answer a range question. 558 of them were 20 top values
+written as `{"value", "count", "pct"}` objects. The default is now
+`detail="compact"`:
+- counts, distinct count (`~N` when estimated), and the range or numeric stats;
+- top values as `[value, count]` pairs under `top_values_fields`, default
+  `top_n` 10, with `top_values_complete` saying whether every value is listed;
+- no derived `id`, sample values, per-value percentages or prose summary.
+
+The same call is now **289 tokens** on the wire. `detail="full"` returns the old
+shape, with `top_n` still defaulting to 20.
+
+⚠⚠ **Behavior change.** Callers reading `value_distribution` or
+`top_values[i]["value"]` must pass `detail="full"`.
+
+### Fixed - `describe_column` percentages on high-cardinality columns
+
+`top_values[].pct` divided by the sum of the stored top values, not by the
+column's rows. On LAPD `DATE OCC` the most common date read 2.49% when it is
+0.12% of 1,004,894 rows. It now divides by the column's non-null count.
+`value_distribution` (low-cardinality columns) was already right.
+
+### Changed - `get_rows` returns rows as arrays
+
+Rows now come back as `fields` (the column names, once) plus one array per row.
+`row_format="objects"` returns the old dicts. On a 28-column table, 50 rows
+used to repeat every column name 50 times. A single row costs about the same
+either way. The form is the same for any row count, so a caller never has to
+check which one it got.
+
+⚠⚠ **Behavior change.** Callers reading `rows[i]["col"]` must zip `fields` with
+each row or pass `row_format="objects"`. `sample_rows` and `join_datasets` are
+unchanged.
+
+### Changed - per-call `_meta` no longer carries cost figures
+
+Every `aggregate`, `describe_column`, `describe_dataset`, `get_rows`,
+`sample_rows`, `join_datasets` and `get_data_hotspots` response carried
+`total_tokens_saved` plus eight dollar figures (`cost_avoided` and
+`total_cost_avoided` for four models): about 85 to 100 tokens per call.
+`get_session_stats` reports the same totals. Set `JDATAMUNCH_META_COSTS=1` to
+restore them per call. `tokens_saved` stays on every response.
+
+⚠ **This does not change what a default MCP agent pays.** The server already
+strips `_meta` unless `JDATAMUNCH_META_FIELDS` is set. It is a saving for
+Python callers and for clients that turn `_meta` on, and it is stated that way.
+
+### Fixed - the budget trimmer could cut a header without its rows
+
+When a response stayed over `JDATAMUNCH_MAX_RESPONSE_TOKENS` after the
+tool-specific trims, the generic fallback shortened the longest list fields
+one at a time. With array rows, that could shorten `fields` and leave the rows
+whole, so every value after the cut sat under the wrong name. It affected
+`describe_dataset`'s compact view and the new array rows. Headers
+(`fields`, `top_values_fields`) are never trimmed on their own now.
+
 ### Changed - `describe_dataset` returns a compact orientation by default
 
 A realistic-agent benchmark on the LAPD crime file (1,004,894 rows, 28

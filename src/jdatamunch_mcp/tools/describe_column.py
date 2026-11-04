@@ -13,7 +13,7 @@ from ..redact import (
     redaction_meta,
 )
 from ..storage.data_store import DataStore
-from ..storage.token_tracker import estimate_savings, record_savings, cost_avoided
+from ..storage.token_tracker import estimate_savings, record_savings, per_call_costs
 
 
 def _offload():
@@ -32,15 +32,63 @@ def _offload():
 
 
 
+# Compact view (the default): the same facts with fewer repeated keys.
+COMPACT_TOP_N = 10
+FULL_TOP_N = 20
+_DETAILS = ("compact", "full")
+
+
+def _compact(result: dict, col_data: dict) -> dict:
+    """Reshape the full result into the compact default.
+
+    Drops the derived id, the sample values (the top values are the same kind
+    of evidence), the prose summary and per-value percentages (count / count).
+    Top values become [value, count] pairs.
+    """
+    exact = col_data.get("cardinality_is_exact", True)
+    out: dict = {
+        "name": result["name"],
+        "type": result["type"],
+        "detail": "compact",
+        "count": result["count"],
+        "null_count": result["null_count"],
+        "null_pct": result["null_pct"],
+        "distinct": result["cardinality"] if exact else f"~{result['cardinality']}",
+    }
+    if result.get("is_unique"):
+        out["is_unique"] = True
+    if result.get("null_tokens"):
+        out["null_tokens"] = result["null_tokens"]
+    for k in ("min", "max", "mean", "median", "histogram",
+              "datetime_min", "datetime_max", "datetime_format"):
+        if result.get(k) is not None:
+            out[k] = result[k]
+    if "value_distribution" in result:
+        out["top_values_fields"] = ["value", "count"]
+        out["top_values"] = [[v["value"], v["count"]] for v in result["value_distribution"]]
+        out["top_values_complete"] = not result.get("unique_values_truncated", False)
+    elif "top_values" in result:
+        out["top_values_fields"] = ["value", "count"]
+        out["top_values"] = [[v["value"], v["count"]] for v in result["top_values"]]
+        out["top_values_complete"] = False
+        if not exact:
+            # Counted over the first distinct values seen, so the order is approximate.
+            out["top_values_approx"] = True
+    elif result.get("sample_values"):
+        out["sample_values"] = result["sample_values"][:3]
+    return out
+
+
 def describe_column(
     dataset: str,
     column: str,
-    top_n: int = 20,
+    top_n: Optional[int] = None,
     histogram_bins: int = 10,
     redact: bool = True,
     redact_patterns: Optional[list] = None,
     storage_path: Optional[str] = None,
     verify_source: bool = False,
+    detail: str = "compact",
 ) -> dict:
     """Return a deep profile of a single column.
 
@@ -53,6 +101,10 @@ def describe_column(
     you own.
     """
     t0 = time.time()
+    if detail not in _DETAILS:
+        return {"error": f"INVALID_DETAIL: detail must be one of {list(_DETAILS)}, got {detail!r}"}
+    if top_n is None:
+        top_n = COMPACT_TOP_N if detail == "compact" else FULL_TOP_N
     top_n = min(max(1, top_n), HARD_CAP_DESCRIBE_COLUMN_TOP_N)
     histogram_bins = min(max(1, histogram_bins), HARD_CAP_DESCRIBE_COLUMN_BINS)
     store = DataStore(base_path=storage_path or str(get_index_path()))
@@ -115,7 +167,11 @@ def describe_column(
         result["unique_values_truncated"] = len(sorted_vals) > top_n
 
     elif col_data.get("top_values"):
-        total = sum(tv["count"] for tv in col_data["top_values"])
+        # Percent of the column's non-null rows. Until 2026-11-04 this divided
+        # by the sum of the stored top values only, which overstated every
+        # percentage on a high-cardinality column (2.49% for a value that is
+        # 0.12% of 1M rows).
+        total = col_data.get("count") or sum(tv["count"] for tv in col_data["top_values"])
         top_values = [
             {"value": tv["value"], "count": tv["count"],
              "pct": round(tv["count"] / total * 100, 2) if total else 0}
@@ -163,6 +219,9 @@ def describe_column(
     if col_data.get("ai_summary"):
         result["ai_summary"] = col_data["ai_summary"]
 
+    if detail == "compact":
+        result = _compact(result, col_data)
+
     response_bytes = len(json.dumps(result).encode("utf-8"))
     tokens_saved = estimate_savings(idx.source_size_bytes, response_bytes)
     total_saved = record_savings(tokens_saved, str(store.base_path), tool="describe_column")
@@ -203,8 +262,7 @@ def describe_column(
             "freshness": freshness,
             "verdict": verdict,
             "tokens_saved": tokens_saved,
-            "total_tokens_saved": total_saved,
-            **cost_avoided(tokens_saved, total_saved),
+            **per_call_costs(tokens_saved, total_saved),
             "redaction": redaction_meta(
                 applied=redact,
                 summary=combined_summary,

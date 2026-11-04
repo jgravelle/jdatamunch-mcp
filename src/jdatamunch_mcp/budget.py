@@ -69,6 +69,11 @@ def enforce_budget(result: dict, tool_name: str) -> dict:
                 keep = max(1, len(col_names) // 2)
                 inner["rows"] = [{k: row[k] for k in col_names[:keep] if k in row} for row in all_rows]
                 truncations.append(f"columns per row trimmed to {keep}")
+            elif all_rows and isinstance(all_rows[0], list) and isinstance(inner.get("fields"), list):
+                keep = max(1, len(inner["fields"]) // 2)
+                inner["fields"] = inner["fields"][:keep]
+                inner["rows"] = [row[:keep] for row in all_rows]
+                truncations.append(f"columns per row trimmed to {keep}")
 
     elif tool_name == "aggregate" and isinstance(inner, dict):
         groups = inner.get("groups", [])
@@ -80,8 +85,11 @@ def enforce_budget(result: dict, tool_name: str) -> dict:
         for field in ("value_distribution", "top_values"):
             lst = inner.get(field)
             if isinstance(lst, list) and len(lst) > 1:
+                before = len(lst)
                 _trim_list_field(inner, field, budget * 4 // 3)
                 truncations.append(f"{field} truncated to {len(inner[field])}")
+                if len(inner[field]) < before and "top_values_complete" in inner:
+                    inner["top_values_complete"] = False
                 break
 
     elif tool_name == "search_data" and isinstance(result.get("result"), list):
@@ -102,7 +110,11 @@ def enforce_budget(result: dict, tool_name: str) -> dict:
 
     # Generic fallback: trim the largest list field in result["result"] --------
     if _estimate_tokens(result) > budget and isinstance(inner, dict):
-        list_fields = [(k, v) for k, v in inner.items() if isinstance(v, list)]
+        # Never trim a header on its own: "fields" (get_rows, describe_dataset)
+        # and "top_values_fields" name the positions in their arrays, so a
+        # shorter header would mislabel every value after the cut.
+        list_fields = [(k, v) for k, v in inner.items()
+                       if isinstance(v, list) and not k.endswith("fields")]
         list_fields.sort(key=lambda x: len(x[1]), reverse=True)
         for field, _ in list_fields:
             _trim_list_field(inner, field, budget * 4 // 3)
