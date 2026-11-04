@@ -50,3 +50,6 @@ mcpb/manifest.json
 # live auth tokens in a public repo.
 .mcpregistry_github_token
 .mcpregistry_registry_token
+
+# Maintainer-only notes; imports a private file outside the repo.
+CLAUDE.local.md
