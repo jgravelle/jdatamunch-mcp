@@ -19,7 +19,7 @@ from typing import Optional
 from ..config import get_index_path
 from ..storage.data_store import DataStore
 from ..storage import result_cache
-from ..storage.token_tracker import estimate_savings, record_savings, cost_avoided
+from ..storage.token_tracker import estimate_savings, record_savings, per_call_costs
 from ..runtime.tables import ensure_runtime_tables
 
 
@@ -237,7 +237,6 @@ def get_data_hotspots(
     meta: dict = {
         "timing_ms": round((time.perf_counter() - t0) * 1000, 1),
         "tokens_saved": tokens_saved,
-        "total_tokens_saved": total_saved,
         "cache_hit": False,
         "signals_used": (
             ["null_pct", "cardinality", "outlier", "traffic"]
@@ -245,7 +244,7 @@ def get_data_hotspots(
             else ["null_pct", "cardinality", "outlier"]
         ),
         "runtime_data_present": runtime_data_present,
-        **cost_avoided(tokens_saved, total_saved),
+        **per_call_costs(tokens_saved, total_saved),
     }
     if include_runtime and not runtime_data_present:
         meta["runtime_caveat"] = (

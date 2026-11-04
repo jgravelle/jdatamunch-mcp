@@ -10,7 +10,7 @@ from ..security import validate_filter
 from ..storage.data_store import DataStore
 from ..storage import result_cache
 from ..storage.sqlite_store import query_aggregate
-from ..storage.token_tracker import estimate_savings, record_savings, cost_avoided
+from ..storage.token_tracker import estimate_savings, record_savings, per_call_costs
 
 
 def aggregate(
@@ -126,9 +126,8 @@ def aggregate(
         "_meta": {
             "timing_ms": round((time.time() - t0) * 1000, 1),
             "tokens_saved": tokens_saved,
-            "total_tokens_saved": total_saved,
             "cache_hit": False,
-            **cost_avoided(tokens_saved, total_saved),
+            **per_call_costs(tokens_saved, total_saved),
         },
     }
     result_cache.put(store.dataset_dir(dataset), cache_key, response)

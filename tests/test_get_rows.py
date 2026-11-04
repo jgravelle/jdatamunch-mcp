@@ -6,6 +6,14 @@ from jdatamunch_mcp.tools.get_rows import get_rows
 from jdatamunch_mcp.tools.sample_rows import sample_rows
 
 
+def _rows(out):
+    """Rows as dicts, whichever row_format the tool used."""
+    body = out["result"]
+    if "fields" in body:
+        return [dict(zip(body["fields"], r)) for r in body["rows"]]
+    return body["rows"]
+
+
 def test_get_rows_no_filters(indexed_sample):
     result = get_rows(dataset="sample", limit=10, storage_path=indexed_sample)
     assert "error" not in result
@@ -21,7 +29,7 @@ def test_get_rows_eq_filter(indexed_sample):
         storage_path=indexed_sample,
     )
     assert "error" not in result
-    rows = result["result"]["rows"]
+    rows = _rows(result)
     assert all(row["city"] == "Hollywood" for row in rows)
 
 
@@ -32,7 +40,7 @@ def test_get_rows_contains_filter(indexed_sample):
         storage_path=indexed_sample,
     )
     assert "error" not in result
-    rows = result["result"]["rows"]
+    rows = _rows(result)
     assert all("a" in row["name"].lower() for row in rows)
 
 
@@ -42,7 +50,7 @@ def test_get_rows_gt_filter(indexed_sample):
         filters=[{"column": "age", "op": "gt", "value": 30}],
         storage_path=indexed_sample,
     )
-    rows = result["result"]["rows"]
+    rows = _rows(result)
     for row in rows:
         assert row["age"] > 30
 
@@ -53,7 +61,7 @@ def test_get_rows_is_null_filter(indexed_sample):
         filters=[{"column": "age", "op": "is_null", "value": True}],
         storage_path=indexed_sample,
     )
-    rows = result["result"]["rows"]
+    rows = _rows(result)
     assert all(row["age"] is None for row in rows)
 
 
@@ -64,7 +72,7 @@ def test_get_rows_column_projection(indexed_sample):
         limit=5,
         storage_path=indexed_sample,
     )
-    rows = result["result"]["rows"]
+    rows = _rows(result)
     for row in rows:
         assert "id" in row
         assert "name" in row
@@ -79,7 +87,7 @@ def test_get_rows_ordering(indexed_sample):
         limit=10,
         storage_path=indexed_sample,
     )
-    ages = [r["age"] for r in result["result"]["rows"] if r["age"] is not None]
+    ages = [r["age"] for r in _rows(result) if r["age"] is not None]
     assert ages == sorted(ages)
 
 

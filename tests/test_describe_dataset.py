@@ -47,7 +47,7 @@ def test_describe_dataset_column_ids(indexed_sample):
 
 def test_describe_column_basic(indexed_sample):
     result = describe_column(
-        dataset="sample", column="city", storage_path=indexed_sample
+        dataset="sample", column="city", storage_path=indexed_sample, detail="full"
     )
     assert "error" not in result
     r = result["result"]
@@ -68,7 +68,7 @@ def test_describe_column_by_id(indexed_sample):
 
 def test_describe_column_value_distribution(indexed_sample):
     result = describe_column(
-        dataset="sample", column="city", storage_path=indexed_sample
+        dataset="sample", column="city", storage_path=indexed_sample, detail="full"
     )
     assert "value_distribution" in result["result"]
     dist = result["result"]["value_distribution"]
