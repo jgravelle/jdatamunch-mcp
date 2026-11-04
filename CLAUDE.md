@@ -399,7 +399,7 @@ Real production dataset (LAPD crime records, 1M rows):
 
 | Dataset | Rows | Cols | File Size | Avg Ratio |
 |---------|-----:|-----:|----------:|----------:|
-| crime.csv | 1,004,894 | 28 | 255.5 MB | **25,333x** |
+| crime.csv | 1,004,894 | 28 | 255.5 MB | **99,059x** (2026-11-04, compact defaults) |
 
 Baseline = full raw CSV tokenized. jDataMunch = `describe_dataset` + `describe_column`.
 Benchmark harness: `python benchmarks/harness/run_benchmark.py <file.csv>`

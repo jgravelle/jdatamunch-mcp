@@ -34,19 +34,19 @@ Measured on a real public dataset, not estimated. Full harness and per-query res
 
 > **Corpus:** LAPD crime records — 1,004,894 rows, 28 columns, 255 MB
 > **Baseline:** 111,028,360 tokens to paste the raw file
-> **`describe_dataset`:** ~3,849 tokens — a **25,333× reduction**
+> **`describe_dataset`:** ~892 tokens, schema plus one column ~1,200: a **99,059× reduction** (mean of five per-task ratios)
 > [Methodology & harness](benchmarks/METHODOLOGY.md) · [Full results](benchmarks/results.md)
 
 | Task | Without jDataMunch | With jDataMunch | Reduction |
 |------|--------------------|-----------------|-----------|
-| Understand a dataset's shape | Paste 111M tokens | `describe_dataset` → ~3,849 tokens | ~25,000× |
-| Schema + one column deep-dive | Paste 111M tokens | `describe_dataset` + `describe_column` → ~4,400 tokens | ~25,000× |
+| Understand a dataset's shape | Paste 111M tokens | `describe_dataset` → ~892 tokens | ~124,000× |
+| Schema + one column deep-dive | Paste 111M tokens | `describe_dataset` + `describe_column` → ~1,200 tokens | ~93,000× |
 | Filter to matching rows | Load all 1M rows | `get_rows` with filters → matching rows only | ~99%+ |
 | Count by category | Return all rows, aggregate in the model | `aggregate(group_by=[...])` → 21 rows | ~99.9% |
 
 **What these numbers are and are not.** The reduction is measured against pasting the complete file, which is what a naive agent does and what the token bill reflects. It is *not* measured against a competent human analyst who would never paste a 255 MB CSV. The multiple scales with file size: a 200-row spreadsheet has far less to save, and the honest figure there is closer to "no meaningful difference."
 
-Typical latencies from the same run: `describe_column` on a single column, 22–33 ms and ~600 tokens.
+Typical latencies from the same run: `describe_dataset` plus `describe_column` on a single column, 22 to 40 ms; `describe_column` alone is 223 to 387 tokens.
 
 ---
 
@@ -206,7 +206,7 @@ Released under the **jDataMunch-MCP Dual-Use License** ([full terms](LICENSE)). 
 
 **Full jMunch suite (code + docs + data):** [Trio Builder, $99](https://jcodemunch.com/descriptions.php#builder) · [Trio Studio, $449](https://jcodemunch.com/descriptions.php#studio) · [Trio Platform, $2,499](https://jcodemunch.com/descriptions.php#platform)
 
-Individual developers and non-commercial projects need no license. Organizations deploying jDataMunch across internal teams do.
+Personal and other non-commercial use is free. Work use at a for-profit company, or for client or paid work, needs a license, paid once.
 
 ---
 
