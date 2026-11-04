@@ -16,12 +16,10 @@ import datetime as _dt
 from typing import Any
 
 
-# Canonical null tokens (mirrors profiler._NULL_VALUES). Empty string is
-# treated as null by the profiler, so we collapse all of these to "".
-NULL_TOKENS = frozenset([
-    "", "null", "NULL", "none", "None", "N/A", "n/a", "NA", "na",
-    "NaN", "nan", "-", ".", "#N/A", "#NA", "#NULL!", "n.a.", "N.A.",
-])
+# Canonical null tokens collapse to "". Only the HARD ones: placeholder tokens
+# such as "-" pass through as text so the profiler and row store can decide by
+# column type, exactly as they do for a CSV cell.
+from ..profiler.column_profiler import _HARD_NULL_VALUES as NULL_TOKENS
 
 
 def normalize_native(raw: Any, source_format: str = "") -> str:

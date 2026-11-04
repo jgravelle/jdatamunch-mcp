@@ -18,7 +18,7 @@ def test_describe_dataset_basic(indexed_sample):
 
 def test_describe_dataset_column_filter(indexed_sample):
     result = describe_dataset(
-        dataset="sample", columns=["id", "name"], storage_path=indexed_sample
+        dataset="sample", columns=["id", "name"], storage_path=indexed_sample, detail="full"
     )
     assert "error" not in result
     names = [c["name"] for c in result["result"]["columns"]]
@@ -39,7 +39,7 @@ def test_describe_dataset_not_indexed(storage_dir):
 
 
 def test_describe_dataset_column_ids(indexed_sample):
-    result = describe_dataset(dataset="sample", storage_path=indexed_sample)
+    result = describe_dataset(dataset="sample", storage_path=indexed_sample, detail="full")
     for col in result["result"]["columns"]:
         assert col["id"].startswith("sample::")
         assert col["id"].endswith("#column")

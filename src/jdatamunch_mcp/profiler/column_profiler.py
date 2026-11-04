@@ -20,10 +20,31 @@ from .tdigest import TDigest
 from .hll import HyperLogLog
 from .semantic_types import detect_semantic_type
 
-_NULL_VALUES = frozenset([
-    "", "null", "NULL", "none", "None", "N/A", "n/a", "NA", "na",
-    "NaN", "nan", "-", ".", "#N/A", "#NA", "#NULL!", "n.a.", "N.A.",
+# Version of the profiling rules. Bump it whenever a change alters the profile
+# an unchanged file would produce, so existing indexes are re-profiled (see
+# DataStore.needs_reindex). History:
+#   1: everything before 2026-11-04.
+#   2: datetime min/max compared as dates, not text; 12-hour AM/PM format
+#      detected; _TEXT_PLACEHOLDERS kept as values in text columns.
+PROFILE_VERSION = 2
+
+# Null tokens come in two kinds.
+#
+# _HARD_NULL_VALUES are null in every column. They are pandas' default NA
+# strings that we already treated as null, plus Excel's #NULL! error value.
+#
+# _TEXT_PLACEHOLDERS are null only where a value cannot be text: integer,
+# float and datetime columns. In a text column they are kept as the value the
+# file holds. Until PROFILE_VERSION 2 they were null everywhere, which rewrote a
+# literal "-" in a text column to NULL in the row store too, so no tool could
+# show what the file said. pandas, DuckDB and SQL keep them as text.
+_HARD_NULL_VALUES = frozenset([
+    "", "null", "NULL", "None", "N/A", "n/a", "NA",
+    "NaN", "nan", "#N/A", "#NA", "#NULL!",
 ])
+_TEXT_PLACEHOLDERS = frozenset(["-", ".", "none", "na", "n.a.", "N.A."])
+# Union, kept for callers that need "null in a non-text column".
+_NULL_VALUES = _HARD_NULL_VALUES | _TEXT_PLACEHOLDERS
 
 # Type rank: lower = more specific
 _TYPE_RANK = {"integer": 0, "float": 1, "datetime": 2, "string": 3}
@@ -38,16 +59,48 @@ TOP_VALUES_LIMIT = 50                   # top values stored for high-cardinality
 
 MAX_TYPE_VIOLATION_SAMPLES = 5
 
-# Common datetime patterns (regex → strptime format string)
+# Common datetime patterns (regex, strptime format string).
+# ORDER MATTERS: the first match wins. The 12-hour AM/PM pattern must come
+# before the 24-hour "%m/%d/%Y %H:%M:%S" one, which has no end anchor and would
+# otherwise claim "01/15/2020 12:00:00 AM" as 24-hour time.
 _DATETIME_PATTERNS = [
     (re.compile(r"^\d{4}-\d{2}-\d{2}$"), "%Y-%m-%d"),
     (re.compile(r"^\d{2}/\d{2}/\d{4}$"), "%m/%d/%Y"),
     (re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}"), "%Y-%m-%dT%H:%M:%S"),
     (re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"), "%Y-%m-%d %H:%M:%S"),
-    (re.compile(r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}"), "%m/%d/%Y %H:%M:%S"),
     # US date + 12h time with AM/PM (e.g. "01/15/2020 12:00:00 AM")
     (re.compile(r"^\d{1,2}/\d{1,2}/\d{4} \d{1,2}:\d{2}:\d{2} [AP]M$"), "%m/%d/%Y %I:%M:%S %p"),
+    (re.compile(r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}"), "%m/%d/%Y %H:%M:%S"),
 ]
+
+# Sort keys for datetime min/max. Text order is not date order for US dates
+# ("12/31/2023" sorts after "12/30/2024"), so the range is computed on a parsed
+# (year, month, day, hour, minute, second) tuple and the original text of the
+# winning value is kept for display. Timezone suffixes are ignored.
+_ISO_KEY_RX = re.compile(
+    r"^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?)?"
+)
+_US_KEY_RX = re.compile(
+    r"^(\d{1,2})/(\d{1,2})/(\d{4})(?: (\d{1,2}):(\d{2}):(\d{2})(?:\.(\d+))?(?: ([AP]M))?)?"
+)
+
+
+def _datetime_sort_key(value: str) -> Optional[tuple]:
+    """Return a chronologically sortable tuple for a recognised datetime string."""
+    m = _ISO_KEY_RX.match(value)
+    if m:
+        y, mo, d, h, mi, sec, frac = m.groups()
+        return (int(y), int(mo), int(d), int(h or 0), int(mi or 0), int(sec or 0),
+                float("0." + frac) if frac else 0.0)
+    m = _US_KEY_RX.match(value)
+    if m:
+        mo, d, y, h, mi, sec, frac, ampm = m.groups()
+        hour = int(h or 0)
+        if ampm:
+            hour = hour % 12 + (12 if ampm == "PM" else 0)
+        return (int(y), int(mo), int(d), hour, int(mi or 0), int(sec or 0),
+                float("0." + frac) if frac else 0.0)
+    return None
 
 
 def _is_datetime_str(value: str) -> bool:
@@ -116,6 +169,13 @@ class _ColAcc:
     dt_min: Optional[str] = None
     dt_max: Optional[str] = None
     dt_format: Optional[str] = None
+    dt_min_key: Optional[tuple] = None
+    dt_max_key: Optional[tuple] = None
+    # Non-empty tokens counted as null, e.g. {"N/A": 12}. Disclosed on the profile.
+    null_tokens: dict = field(default_factory=dict)
+    # _TEXT_PLACEHOLDERS seen; resolved to values or nulls by the final type.
+    placeholder_counts: dict = field(default_factory=dict)
+    placeholders_resolved: bool = False
 
 
 def _welford_update(acc: _ColAcc, x: float) -> None:
@@ -138,8 +198,15 @@ def update_acc(acc: _ColAcc, raw_value: str) -> None:
     """Update accumulator with one raw string value from the CSV."""
     stripped = raw_value.strip() if raw_value else ""
 
-    if stripped in _NULL_VALUES:
+    if stripped in _HARD_NULL_VALUES:
         acc.null_count += 1
+        if stripped:
+            acc.null_tokens[stripped] = acc.null_tokens.get(stripped, 0) + 1
+        return
+    if stripped in _TEXT_PLACEHOLDERS:
+        # Does not vote on the type. finalize_profile() makes it a value in a
+        # text column and a null otherwise.
+        acc.placeholder_counts[stripped] = acc.placeholder_counts.get(stripped, 0) + 1
         return
 
     acc.count += 1
@@ -199,10 +266,14 @@ def update_acc(acc: _ColAcc, raw_value: str) -> None:
     # --- Datetime min/max ---
     if acc.type_rank == 2:
         if observed_rank == 2:
-            if acc.dt_min is None or stripped < acc.dt_min:
-                acc.dt_min = stripped
-            if acc.dt_max is None or stripped > acc.dt_max:
-                acc.dt_max = stripped
+            key = _datetime_sort_key(stripped)
+            if key is not None:
+                if acc.dt_min_key is None or key < acc.dt_min_key:
+                    acc.dt_min_key = key
+                    acc.dt_min = stripped
+                if acc.dt_max_key is None or key > acc.dt_max_key:
+                    acc.dt_max_key = key
+                    acc.dt_max = stripped
             if acc.dt_format is None:
                 acc.dt_format = _get_datetime_format(stripped)
 
@@ -264,10 +335,43 @@ class ColumnProfile:
     datetime_max: Optional[str] = None
     datetime_format: Optional[str] = None
     ai_summary: Optional[str] = None
+    null_tokens: Optional[dict] = None
+
+
+def _resolve_placeholders(acc: _ColAcc) -> None:
+    """Turn placeholder tokens into values (text column) or nulls (any other)."""
+    if acc.placeholders_resolved:
+        return
+    acc.placeholders_resolved = True
+    is_text = _TYPE_FROM_RANK[acc.type_rank] == "string"
+    for tok, n in acc.placeholder_counts.items():
+        if not is_text:
+            acc.null_count += n
+            acc.null_tokens[tok] = acc.null_tokens.get(tok, 0) + n
+            continue
+        acc.count += n
+        acc.rank_counts[3] += n
+        vc = acc.value_counts
+        if tok in vc:
+            vc[tok] += n
+            acc.seen_duplicate = True
+            continue
+        if n > 1:
+            acc.seen_duplicate = True
+        if not acc.cardinality_overflow and len(vc) < MAX_CARDINALITY_TRACK:
+            vc[tok] = n
+            continue
+        if acc.hll is None:
+            acc.cardinality_overflow = True
+            acc.hll = HyperLogLog()
+            for k in vc:
+                acc.hll.add(k)
+        acc.hll.add(tok)
 
 
 def finalize_profile(acc: _ColAcc) -> ColumnProfile:
     """Build a ColumnProfile from a completed _ColAcc."""
+    _resolve_placeholders(acc)
     total = acc.count + acc.null_count
     null_pct = round(acc.null_count / total * 100, 1) if total > 0 else 0.0
     col_type = _TYPE_FROM_RANK[acc.type_rank]
@@ -446,6 +550,7 @@ def finalize_profile(acc: _ColAcc) -> ColumnProfile:
         datetime_min=acc.dt_min if col_type == "datetime" else None,
         datetime_max=acc.dt_max if col_type == "datetime" else None,
         datetime_format=acc.dt_format if col_type == "datetime" else None,
+        null_tokens=dict(acc.null_tokens) or None,
     )
 
 

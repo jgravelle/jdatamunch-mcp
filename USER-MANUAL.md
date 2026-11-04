@@ -178,15 +178,17 @@ Once indexed, the first thing to do is understand what's in the data.
 
 > "What's in the sales dataset?"
 
-This calls `describe_dataset`, which returns:
+This calls `describe_dataset`, which returns one row per column (the default, `detail="compact"`):
 
 * Every column's name and detected type
-* How many unique values each column has
 * What percentage of values are null/missing
-* Sample values for each column
-* A plain-English summary of the dataset and each column
+* How many distinct values each column has (`~N` when estimated)
+* The min and max for numbers and dates, or the most frequent values for text (every value when there are 10 or fewer)
+* The text format of each date column, and which columns are unique
 
-This single call replaces reading the entire file. It takes about 35 milliseconds and uses roughly 3,800 tokens — compared to 111 million tokens for the raw file.
+Ask for `detail="full"` to add sample values, top values with counts, mean, median and a plain-English summary of each column.
+
+On the 28-column, 1M-row LAPD crime file the compact view is about 850 tokens and the full view about 4,800 (cl100k, as sent over MCP). The raw file is 111 million.
 
 ### Deep-dive on one column
 

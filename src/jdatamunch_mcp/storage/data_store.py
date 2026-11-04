@@ -24,6 +24,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+from ..profiler.column_profiler import PROFILE_VERSION
+
 INDEX_VERSION = 3  # v3 (1.6.0): runtime ingest tables (runtime_query_calls + runtime_redaction_log) materialised on first load
 
 
@@ -47,6 +49,12 @@ class DataIndex:
     fingerprint: Optional[str] = None  # C2: content fingerprint independent of filename/path
     learned_null_tokens: list = field(default_factory=list)  # C3: detected sentinel-like tokens
     coverage: Optional[dict] = None  # 1.20.0: ingest coverage (walk, rows_indexed, skip_counts, recorded_at)
+    # Version of the profiling rules that produced `columns`. An index written
+    # before the field existed reads as 1. A lower value than
+    # column_profiler.PROFILE_VERSION makes needs_reindex() return True, so an
+    # unchanged file is re-profiled after the rules change instead of serving
+    # the old numbers forever under incremental=True.
+    profile_version: int = 1
 
 
 def _hash_file(path: str) -> str:
@@ -96,6 +104,7 @@ def _profile_to_dict(p: Any) -> dict:
         "datetime_max": p.datetime_max,
         "datetime_format": p.datetime_format,
         "ai_summary": p.ai_summary,
+        "null_tokens": getattr(p, "null_tokens", None),
     }
 
 
@@ -118,6 +127,7 @@ def _index_to_dict(idx: DataIndex) -> dict:
         "fingerprint": idx.fingerprint,
         "learned_null_tokens": idx.learned_null_tokens,
         "coverage": idx.coverage,
+        "profile_version": idx.profile_version,
     }
 
 
@@ -205,6 +215,7 @@ def _index_from_dict(d: dict) -> DataIndex:
         fingerprint=d.get("fingerprint"),
         learned_null_tokens=d.get("learned_null_tokens", []),
         coverage=d.get("coverage"),
+        profile_version=d.get("profile_version", 1),
     )
 
 
@@ -324,6 +335,7 @@ class DataStore:
             fingerprint=fingerprint,
             learned_null_tokens=learned_null_tokens or [],
             coverage=coverage,
+            profile_version=PROFILE_VERSION,
         )
 
         dir_ = self.dataset_dir(dataset_id)
@@ -480,9 +492,12 @@ class DataStore:
         return {"state": "stale", "verified": "content_hash", "source_path": source_path}
 
     def needs_reindex(self, dataset_id: str, source_path: str) -> bool:
-        """Return True if the source file has changed or was never indexed."""
+        """Return True if the source file has changed, was never indexed, or
+        was profiled under older profiling rules."""
         idx = self.load(dataset_id)
         if idx is None:
+            return True
+        if idx.profile_version < PROFILE_VERSION:
             return True
         current_hash = _hash_file(source_path)
         return idx.source_hash != current_hash

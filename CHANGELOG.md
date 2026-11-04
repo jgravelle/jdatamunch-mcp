@@ -2,6 +2,82 @@
 
 ## [Unreleased]
 
+### Changed - `describe_dataset` returns a compact orientation by default
+
+A realistic-agent benchmark on the LAPD crime file (1,004,894 rows, 28
+columns) found that `describe_dataset` cost more than an agent reading the
+file's header plus 20 rows: 4,870 tokens against 2,274 (cl100k). The wire cost
+was higher still: the server sent every response with `indent=2`, and the same
+result is 6,878 tokens that way.
+
+The default is now `detail="compact"`: one array per column under a `fields`
+header (`name`, `type`, `null_pct`, `distinct`, `range_or_top_values`), plus
+`unique` columns and `datetime_formats`. Numbers and dates carry their range.
+Text columns carry their most frequent values, every value when there are 10
+or fewer, each cut to 40 characters. On the LAPD file that is **852 tokens on
+the wire**, against 2,274 for the head and 4,758 for the full view. The
+cut-offs depend only on column type and distinct count; nothing in them is
+keyed to a file or a question.
+
+⚠⚠ **Behavior change, and the tradeoff is named.** A caller that reads
+`result.columns[i]["name"]` now gets arrays. Pass `detail="full"` for the old
+shape, which is unchanged. Means, medians, samples, counts and the per-column
+summaries leave the default; `detail="full"` or `describe_column` gets them.
+Listed text values go through the default redaction, as in `describe_column`.
+
+⚠ For a column whose distinct count is estimated (`~N`), the "most frequent"
+values are counted over the first 5,000 distinct values seen, so the order is
+approximate.
+
+⚠ It is not a win on every file. Its cost is about 20 to 35 tokens per column
+whatever the row width, so on a narrow file of short values `head -n 21` can
+cost about the same.
+
+### Changed - the MCP wire sends compact JSON
+
+`call_tool` serialized every result with `indent=2`. It now uses
+`separators=(",", ":")`. Any JSON parser reads both the same; every tool's
+responses cost fewer tokens (about 30% on `describe_dataset`'s full view).
+
+### Fixed - datetime min/max compared text, not dates
+
+`datetime_min` / `datetime_max` kept the smallest and largest TEXT. For US
+dates text order is not date order: on the LAPD file `DATE OCC` reported a
+latest date of 12/31/2023 while the file runs to 12/30/2024, and `Date Rptd`
+reported 12/31/2024 while it runs to 03/28/2025. The range now compares a
+parsed date and keeps the original text. The 12-hour AM/PM pattern now comes
+before the unanchored 24-hour one, so `datetime_format` reads
+`%m/%d/%Y %I:%M:%S %p` for such data instead of `%H`.
+
+⚠ **Existing indexes are re-profiled, not patched.** A new
+`profile_version` (2) is stored in `index.json`; `needs_reindex()` returns True
+for anything profiled under older rules, so `index_local(incremental=True)` on
+an unchanged file re-profiles it once. Legacy indexes read as version 1.
+
+### Fixed - "-" and "." in a text column are values, not nulls
+
+`"-"`, `"."`, `"none"`, `"na"`, `"n.a."` and `"N.A."` were null in every
+column, and the row store wrote NULL for them, so a value the file holds could
+not be seen through any tool. On the LAPD file one `Vict Sex` of "-" was
+counted with the 144,631 empty cells. They are now null only in integer, float
+and datetime columns, where a value cannot be text, and are kept as values in
+text columns. The tokens still null everywhere are the pandas default NA
+strings we already used, plus Excel's `#NULL!`. Placeholders still take no
+part in type inference, so a numeric column that uses "-" for missing stays
+numeric.
+
+⚠⚠ **Tradeoff.** A text column's `null_count` and `null_pct` drop by its
+placeholder count; the placeholder appears in `distinct`, top values and
+group-by results; an `IS NULL` filter no longer matches it. Numeric and datetime
+columns are unchanged. To find them, profiles now carry `null_tokens`, the
+non-empty tokens counted as null (`{"N/A": 12}`), shown by `describe_column`.
+
+### Fixed - a local sdist shipped `CLAUDE.local.md`
+
+A per-developer file ignored by a global gitignore, so CI never has it, and a
+local build (the one an upload uses) put it at the sdist root.
+`test_sdist_exclusions` caught it. It is in the sdist `exclude` now.
+
 ### Fixed - the Sonnet rate was written for a date that never arrived
 
 `storage/token_tracker.PRICING` carried `claude_sonnet` at **$3.00 / 1M input
