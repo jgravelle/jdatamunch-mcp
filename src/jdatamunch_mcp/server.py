@@ -2319,7 +2319,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         except Exception:
             pass
 
-        _text = json.dumps(result, indent=2)
+        # Compact separators: indent=2 made the same result ~40% more tokens
+        # (6,878 vs 4,750 for describe_dataset on a 28-column file), paid by
+        # the agent on every call. Any JSON parser reads both the same.
+        _text = json.dumps(result, separators=(",", ":"))
         try:
             from .storage.token_tracker import record_response_text as _rrt
             _rrt(_text)
