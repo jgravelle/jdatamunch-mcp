@@ -10,7 +10,7 @@ authors = [
 license = "LicenseRef-jDataMunch-Dual-Use"
 license-files = ["LICENSE"]
 dependencies = [
-    "mcp>=1.10.0,<2.0.0",
+    "mcp>=1.30.0,<2.0.0",
     "charset-normalizer>=3.0.0",
 ]
 
