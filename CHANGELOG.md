@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Changed - jDataMunch-only licenses are no longer sold
+
+The jDataMunch-only Builder ($39), Studio ($149) and Platform ($499) licenses
+are retired. Every commercial license now covers jCodeMunch, jDocMunch and
+jDataMunch: Builder $99 (1 developer), Studio $449 (up to 5 developers) and
+Platform $2,499 (org-wide internal deployment), one-time.
+
+A new Freelance license, $9.99 one-time, covers one individual's own freelance
+work and side projects that brought in under $10,000 in the preceding 12
+months. It does not cover work for an employer. `LICENSE` gains the Freelance
+section and the new price list, and its purchase link moves to
+`https://jcodemunch.com/descriptions.php`.
+
+Every jDataMunch-only license already sold stays valid. The license header and
+the `LicenseRef-jDataMunch-Dual-Use` identifier are unchanged.
+
 ## [1.33.1] - 2026-11-21
 
 ### Changed - the `mcp` dependency floor is now 1.30.0
