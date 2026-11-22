@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [1.33.1] - 2026-11-21
+
+### Changed - the `mcp` dependency floor is now 1.30.0
+
+`pyproject.toml` declared `mcp>=1.10.0,<2.0.0`. mcp releases before 1.30.0
+carry one high and four medium security advisories, and 1.30.0 is the first
+release with them fixed. The floor is now `mcp>=1.30.0,<2.0.0`; the upper bound
+is unchanged. No code changed, and the suite passes against mcp 1.30.0.
+
+An environment pinned below mcp 1.30.0 can no longer install this version.
+
 ## [1.33.0] - 2026-11-04
 
 ### Changed - `describe_column` returns a compact profile by default
