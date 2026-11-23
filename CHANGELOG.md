@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.33.2] - 2026-11-23
+
 ### Changed - jDataMunch-only licenses are no longer sold
 
 The jDataMunch-only Builder ($39), Studio ($149) and Platform ($499) licenses
