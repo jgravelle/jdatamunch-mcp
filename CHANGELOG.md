@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.33.3] - 2026-11-24
+
 ### Fixed - counts in a trimmed reply now match what is sent
 
 When the token-budget trimmer shortened a reply, the counts beside the data
