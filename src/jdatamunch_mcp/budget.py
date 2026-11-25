@@ -88,6 +88,115 @@ def _recount(inner: dict, columns_before: Any) -> None:
             page["remaining_column_names"] = cut + list(page.get("remaining_column_names") or [])
 
 
+_ROW_ID = "_row_id"
+CUT_MARK = "..."
+
+
+def _cap_cell(value: Any, cap: Any) -> Any:
+    if cap is not None and isinstance(value, str) and len(value) > cap:
+        return value[:cap] + CUT_MARK
+    return value
+
+
+def _shape_rows(rows: list, names: list, arrays: bool, cap: Any) -> list:
+    """Project rows onto the first len(names) columns and cap long strings."""
+    if arrays:
+        keep = len(names)
+        return [[_cap_cell(v, cap) for v in row[:keep]] for row in rows]
+    return [{k: _cap_cell(row[k], cap) for k in names if k in row} for row in rows]
+
+
+def _fit_rows(result: dict, inner: dict, budget: int, truncations: list) -> None:
+    """Fit get_rows / sample_rows / join_datasets rows to the budget.
+
+    Trim order, each step only when the one before cannot fit:
+
+    1. Cut rows. The cut aims at the budget itself, so when one row fits the
+       reply ships every column. (It used to aim at 4/3 of the budget, which
+       left the reply over budget and always fell through to step 2.)
+    2. Drop trailing columns, but never past the first data column, so a row
+       always carries data and not only `_row_id`.
+    3. Cut long string values to the longest length that fits, marked with
+       CUT_MARK.
+
+    After a column or value cut, rows are cut again from the full list, so
+    the room the cut freed goes to more rows.
+    """
+    original = inner.get("rows")
+    if not isinstance(original, list) or not original:
+        return
+
+    if len(original) > 1:
+        _trim_list_field(inner, "rows", budget)
+    if _estimate_tokens(result) <= budget:
+        if len(inner["rows"]) < len(original):
+            truncations.append(f"rows truncated to {len(inner['rows'])}")
+        return
+
+    arrays = isinstance(original[0], list) and isinstance(inner.get("fields"), list)
+    if arrays:
+        names = list(inner["fields"])
+    elif isinstance(original[0], dict):
+        names = list(original[0].keys())
+    else:
+        if len(inner["rows"]) < len(original):
+            truncations.append(f"rows truncated to {len(inner['rows'])}")
+        return
+
+    def fits_one(keep: int, cap: Any) -> bool:
+        if arrays:
+            inner["fields"] = names[:keep]
+        inner["rows"] = _shape_rows(original[:1], names[:keep], arrays, cap)
+        return _estimate_tokens(result) <= budget
+
+    # Step 2: the most columns a single row can carry, down to the floor.
+    data_at = next((i for i, n in enumerate(names) if n != _ROW_ID), None)
+    floor = len(names) if data_at is None else data_at + 1
+    lo, hi = floor, len(names)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if fits_one(mid, None):
+            lo = mid
+        else:
+            hi = mid - 1
+    keep = lo
+
+    # Step 3: still over at the floor, so cut long values instead.
+    cap = None
+    if not fits_one(keep, None):
+        longest = max(
+            (len(v) for row in original[:1]
+             for v in (row[:keep] if arrays else [row.get(k) for k in names[:keep]])
+             if isinstance(v, str)),
+            default=0,
+        )
+        if longest:
+            lo, hi = 0, longest
+            while lo < hi:
+                mid = (lo + hi + 1) // 2
+                if fits_one(keep, mid):
+                    lo = mid
+                else:
+                    hi = mid - 1
+            cap = lo
+
+    if arrays:
+        inner["fields"] = names[:keep]
+    inner["rows"] = _shape_rows(original, names[:keep], arrays, cap)
+    if len(inner["rows"]) > 1:
+        _trim_list_field(inner, "rows", budget)
+
+    if len(inner["rows"]) < len(original):
+        truncations.append(f"rows truncated to {len(inner['rows'])}")
+    if keep < len(names):
+        truncations.append(f"columns per row trimmed to {keep}")
+        _note_dropped_columns(result, inner, names[keep:])
+    if cap is not None:
+        truncations.append(
+            f"string values cut to {cap} characters, marked with a trailing {CUT_MARK!r}"
+        )
+
+
 def enforce_budget(result: dict, tool_name: str) -> dict:
     """Truncate *result* (in-place) so its JSON fits within the token budget.
 
@@ -115,31 +224,7 @@ def enforce_budget(result: dict, tool_name: str) -> dict:
             truncations.append(f"columns truncated to {len(inner['columns'])}")
 
     elif tool_name in ("get_rows", "sample_rows", "join_datasets") and isinstance(inner, dict):
-        rows = inner.get("rows", [])
-        if isinstance(rows, list) and len(rows) > 1:
-            # First try trimming rows
-            original_rows = len(rows)
-            _trim_list_field(inner, "rows", budget * 4 // 3)
-            if len(inner["rows"]) < original_rows:
-                truncations.append(f"rows truncated to {len(inner['rows'])}")
-        # If still over budget, trim columns within each row
-        if _estimate_tokens(result) > budget and isinstance(inner.get("rows"), list):
-            all_rows = inner["rows"]
-            dropped: list = []
-            if all_rows and isinstance(all_rows[0], dict):
-                col_names = list(all_rows[0].keys())
-                keep = max(1, len(col_names) // 2)
-                dropped = col_names[keep:]
-                inner["rows"] = [{k: row[k] for k in col_names[:keep] if k in row} for row in all_rows]
-                truncations.append(f"columns per row trimmed to {keep}")
-            elif all_rows and isinstance(all_rows[0], list) and isinstance(inner.get("fields"), list):
-                keep = max(1, len(inner["fields"]) // 2)
-                dropped = inner["fields"][keep:]
-                inner["fields"] = inner["fields"][:keep]
-                inner["rows"] = [row[:keep] for row in all_rows]
-                truncations.append(f"columns per row trimmed to {keep}")
-            if dropped:
-                _note_dropped_columns(result, inner, dropped)
+        _fit_rows(result, inner, budget, truncations)
 
     elif tool_name == "aggregate" and isinstance(inner, dict):
         groups = inner.get("groups", [])
