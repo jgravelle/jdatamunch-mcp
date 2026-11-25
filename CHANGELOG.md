@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Fixed - counts in a trimmed reply now match what is sent
+
+When the token-budget trimmer shortened a reply, the counts beside the data
+kept their pre-trim values. `returned` on `run_sql`, `get_rows`,
+`sample_rows`, `join_datasets` and `aggregate` gave the requested count, not
+the sent one (on a 600-row file, `get_rows` sent 103 rows and said 500), so a
+caller paging `get_rows` by `offset + returned` skipped every row that was cut.
+`get_rows` `columns_projected` and `describe_dataset(detail="full")`
+`column_pagination.returned` had the same fault for columns.
+
+The trimmer now recounts after it trims: `returned`, `columns_projected`, and
+`column_pagination` (`returned`, `truncated`, and `remaining_column_names`,
+which now lists the cut columns first so paging by `columns_offset` reaches
+every column). A per-row column trim also updates `join_datasets`
+`columns_a`/`columns_b` and `_meta.column_truncation`. Totals
+(`total_matching`, `total_groups`, `total_columns`) were already right and are
+unchanged. Reported in issue #18 by @rknighton, with a repro and the fix.
+
 ## [1.33.2] - 2026-11-23
 
 ### Changed - jDataMunch-only licenses are no longer sold

@@ -33,6 +33,61 @@ def _trim_list_field(result: dict, field: str, target_tokens: int) -> bool:
     return lo < len(lst)
 
 
+def _column_name(col: Any) -> Any:
+    """Name of a describe_dataset column entry (a dict, or a compact array row)."""
+    if isinstance(col, dict):
+        return col.get("name")
+    if isinstance(col, list) and col:
+        return col[0]
+    return None
+
+
+def _note_dropped_columns(result: dict, inner: dict, dropped: list) -> None:
+    """Keep column lists and the column_truncation note in step with a per-row
+    column trim (get_rows, sample_rows, join_datasets)."""
+    gone = set(dropped)
+    for key in ("columns_a", "columns_b"):
+        if isinstance(inner.get(key), list):
+            inner[key] = [c for c in inner[key] if c not in gone]
+    note = (result.get("_meta") or {}).get("column_truncation")
+    if isinstance(note, dict):
+        cut = [c for c in dropped if c != "_row_id"]
+        note["returned"] = max(0, note.get("returned", 0) - len(cut))
+        note["omitted_columns"] = cut + list(note.get("omitted_columns") or [])
+
+
+def _recount(inner: dict, columns_before: Any) -> None:
+    """Recount every count the trim could have made stale (issue 18).
+
+    `returned` beside rows or groups is what callers page by
+    (`offset + returned`), so a stale count skips the rows that were cut.
+    """
+    for field in ("rows", "groups"):
+        if isinstance(inner.get(field), list) and "returned" in inner:
+            inner["returned"] = len(inner[field])
+            break
+
+    rows = inner.get("rows")
+    if "columns_projected" in inner and isinstance(rows, list) and rows:
+        if isinstance(inner.get("fields"), list):
+            names = inner["fields"]
+        elif isinstance(rows[0], dict):
+            names = list(rows[0].keys())
+        else:
+            names = None
+        if names is not None:
+            inner["columns_projected"] = len([n for n in names if n != "_row_id"])
+
+    page = inner.get("column_pagination")
+    cols = inner.get("columns")
+    if isinstance(page, dict) and isinstance(cols, list) and columns_before is not None:
+        cut = [_column_name(c) for c in columns_before[len(cols):]]
+        if cut:
+            page["returned"] = len(cols)
+            page["truncated"] = True
+            page["remaining_column_names"] = cut + list(page.get("remaining_column_names") or [])
+
+
 def enforce_budget(result: dict, tool_name: str) -> dict:
     """Truncate *result* (in-place) so its JSON fits within the token budget.
 
@@ -45,6 +100,12 @@ def enforce_budget(result: dict, tool_name: str) -> dict:
 
     truncations: list[str] = []
     inner = result.get("result", {})
+    columns_before = (
+        list(inner["columns"])
+        if tool_name == "describe_dataset" and isinstance(inner, dict)
+        and isinstance(inner.get("columns"), list)
+        else None
+    )
 
     # Tool-specific strategies ------------------------------------------------
     if tool_name == "describe_dataset" and isinstance(inner, dict):
@@ -64,16 +125,21 @@ def enforce_budget(result: dict, tool_name: str) -> dict:
         # If still over budget, trim columns within each row
         if _estimate_tokens(result) > budget and isinstance(inner.get("rows"), list):
             all_rows = inner["rows"]
+            dropped: list = []
             if all_rows and isinstance(all_rows[0], dict):
                 col_names = list(all_rows[0].keys())
                 keep = max(1, len(col_names) // 2)
+                dropped = col_names[keep:]
                 inner["rows"] = [{k: row[k] for k in col_names[:keep] if k in row} for row in all_rows]
                 truncations.append(f"columns per row trimmed to {keep}")
             elif all_rows and isinstance(all_rows[0], list) and isinstance(inner.get("fields"), list):
                 keep = max(1, len(inner["fields"]) // 2)
+                dropped = inner["fields"][keep:]
                 inner["fields"] = inner["fields"][:keep]
                 inner["rows"] = [row[:keep] for row in all_rows]
                 truncations.append(f"columns per row trimmed to {keep}")
+            if dropped:
+                _note_dropped_columns(result, inner, dropped)
 
     elif tool_name == "aggregate" and isinstance(inner, dict):
         groups = inner.get("groups", [])
@@ -121,6 +187,10 @@ def enforce_budget(result: dict, tool_name: str) -> dict:
             truncations.append(f"{field} trimmed (generic)")
             if _estimate_tokens(result) <= budget:
                 break
+
+    # Counts taken before the trim must describe what is sent ------------------
+    if truncations and isinstance(inner, dict):
+        _recount(inner, columns_before)
 
     # Inject truncation metadata ----------------------------------------------
     if truncations:
