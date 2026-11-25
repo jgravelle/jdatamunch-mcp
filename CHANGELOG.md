@@ -22,6 +22,26 @@ every column). A per-row column trim also updates `join_datasets`
 (`total_matching`, `total_groups`, `total_columns`) were already right and are
 unchanged. Reported in issue #18 by @rknighton, with a repro and the fix.
 
+### Fixed - a trimmed `get_rows` or `sample_rows` reply carries data again
+
+Under a tight budget, row replies could keep only `_row_id`. The trimmer cut
+rows to 4/3 of the budget, which left the reply over budget, so it then halved
+the columns: three columns (`_row_id`, `id`, `payload`) became one. On a
+600-row file with 400-character payloads, `get_rows` sent 103 rows of
+`_row_id` alone.
+
+The trimmer for `get_rows`, `sample_rows` and `join_datasets` now works in
+this order, each step only when the one before cannot fit:
+
+1. Cut rows to the budget itself, so when one row fits, every column ships.
+   The same file now sends 77 full rows.
+2. Drop trailing columns, never past the first data column.
+3. Cut long string values to the longest length that fits, each marked with a
+   trailing `...` and named in `truncated.details`.
+
+After a column or value cut, rows are cut again from the full list, so the
+freed room goes to more rows. The counts fixed for issue #18 stay correct.
+
 ## [1.33.2] - 2026-11-23
 
 ### Changed - jDataMunch-only licenses are no longer sold
